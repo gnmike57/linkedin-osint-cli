@@ -19,6 +19,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
+    "smoke:menu": "node scripts/smoke-menu.mjs",
+    "smoke:mcp": "node scripts/smoke-mcp.mjs",
     "prepublishOnly": "npm run build"
   },
   "engines": {
@@ -33,10 +35,12 @@
     "url": "https://github.com/bcharleson/linkedincli/issues"
   },
   "dependencies": {
-    "@inquirer/prompts": "^8.3.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "commander": "^14.0.3",
     "zod": "^4.3.6"
+  },
+  "optionalDependencies": {
+    "@inquirer/prompts": "^8.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

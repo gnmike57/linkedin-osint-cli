@@ -7,7 +7,9 @@
 import { z } from 'zod';
 import { readFile } from 'node:fs/promises';
 import type { CommandDefinition } from '../../core/types.js';
-import { buildMatrixHtml } from '../../osint/matrix.js';
+import { ValidationError } from '../../core/errors.js';
+import { buildMatrixHtml, collectMatrixPeople } from '../../osint/matrix.js';
+import { loadPeopleFile } from '../../osint/orgchart.js';
 import { fileTimestamp, writeOutputFile } from './util.js';
 
 const inputSchema = z.object({
@@ -45,7 +47,26 @@ export const osintMatrixCommand: CommandDefinition = {
     };
 
     const text = await readFile(inputAny.file, 'utf-8');
-    const data = JSON.parse(text) as unknown;
+    const trimmed = text.trim();
+
+    let data: unknown;
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        data = JSON.parse(trimmed) as unknown;
+      } catch (err) {
+        throw new ValidationError(
+          `${inputAny.file} is not valid JSON (${(err as Error).message}). ` +
+            'Pass the JSON produced by `linkedin osint orgchart`, or a people JSON/CSV file.',
+        );
+      }
+    } else {
+      // CSV people export — the same loader the other osint commands use.
+      data = await loadPeopleFile(inputAny.file);
+    }
+
+    if (collectMatrixPeople(data).length === 0) {
+      return { error: `No people found in ${inputAny.file}`, code: 'EMPTY_INPUT' };
+    }
 
     const html = buildMatrixHtml(data, { rootLabel: inputAny.name });
     const file = await writeOutputFile(

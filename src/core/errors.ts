@@ -67,6 +67,15 @@ export function formatError(error: unknown): { message: string; code: string } {
     return { message: error.message, code: error.code };
   }
   if (error instanceof Error) {
+    // Map common Node/system errors to stable, actionable codes instead of
+    // leaking a generic UNKNOWN_ERROR to scripts and MCP clients.
+    const nodeCode = (error as NodeJS.ErrnoException).code;
+    if (nodeCode === 'ENOENT') return { message: error.message, code: 'FILE_NOT_FOUND' };
+    if (nodeCode === 'EACCES' || nodeCode === 'EPERM') {
+      return { message: error.message, code: 'PERMISSION_DENIED' };
+    }
+    if (nodeCode === 'EISDIR') return { message: error.message, code: 'NOT_A_FILE' };
+    if (error instanceof SyntaxError) return { message: error.message, code: 'INVALID_JSON' };
     return { message: error.message, code: 'UNKNOWN_ERROR' };
   }
   return { message: String(error), code: 'UNKNOWN_ERROR' };

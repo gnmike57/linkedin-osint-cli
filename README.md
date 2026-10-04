@@ -85,6 +85,16 @@ Two **opt-in, local-only** workarounds (default transport remains Node `fetch`):
 
 Use them together on the local machine when possible.
 
+### Diagnostics
+
+Set `LINKEDIN_DEBUG=1` to trace the HTTP transport on stderr (method, URL, status
+and `Location` for each request, including redirects). It never logs cookies or
+request bodies.
+
+```bash
+LINKEDIN_DEBUG=1 linkedin status --verify
+```
+
 ### Install curl-impersonate (local harness)
 
 Install `curl_chrome123` on the same local machine that holds the LinkedIn session. The transport looks for it on `PATH` (override with `LINKEDIN_CURL_IMPERSONATE_BIN`).
@@ -118,6 +128,14 @@ category browser, guided prompts for each argument/option, and the equivalent
 scriptable command line printed before each run so you can graduate to
 scripts. Session actions (`login`, `status --verify`, `logout`) are built in.
 On a pipe or CI (no TTY), bare `linkedin` prints plain help instead.
+
+The palette uses `@inquirer/prompts` when it is installed. That package is an
+**optional dependency**: if your registry blocks it (or the install is broken),
+the console silently falls back to a built-in zero-dependency
+`node:readline` implementation with the same behaviour — so the console always
+launches. Both paths are exercised by `npm run smoke:menu` (build first), which
+drives a full session through the palette and asserts the selected command
+actually runs.
 
 ### Option A — Read cookies from Chrome (local macOS/Linux only)
 

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { osintEmployeesCommand, writeUsernameFiles } from '../src/commands/osint/employees.js';
+import { osintMatrixCommand } from '../src/commands/osint/matrix.js';
 import { detectPhase } from '../src/commands/osint/funnel.js';
 import { normalizeProfileView } from '../src/commands/osint/deep-dive.js';
 
@@ -301,4 +302,61 @@ describe('osint employees error resilience', () => {
   });
 });
 
+
+
+describe('osint matrix command input handling', () => {
+  const outDir = 'output_test_matrix';
+  const fixtures = 'output_test_matrix_fixtures';
+
+  afterEach(async () => {
+    await rm(outDir, { recursive: true, force: true });
+    await rm(fixtures, { recursive: true, force: true });
+  });
+
+  it('accepts a CSV people file and classifies it on the fly', async () => {
+    await mkdir(fixtures, { recursive: true });
+    const csv = `${fixtures}/people.csv`;
+    await writeFile(
+      csv,
+      'name,title,profile_url\n' +
+        'Ada Lovelace,Chief Technology Officer,https://www.linkedin.com/in/ada\n' +
+        'Grace Hopper,Senior Security Engineer,https://www.linkedin.com/in/grace\n',
+      'utf-8',
+    );
+
+    const result = (await osintMatrixCommand.handler(
+      { file: csv, name: 'Acme', out_dir: outDir } as never,
+      {} as never,
+    )) as any;
+
+    expect(result.file).toContain('org_chart_matrix_');
+    const html = await readFile(result.file, 'utf-8');
+    expect(html).toContain('Ada Lovelace');
+    expect(html).toContain('Grace Hopper');
+  });
+
+  it('reports EMPTY_INPUT for a file with no people instead of a parse error', async () => {
+    await mkdir(fixtures, { recursive: true });
+    const txt = `${fixtures}/names.txt`;
+    await writeFile(txt, 'Ada Lovelace\nGrace Hopper\n', 'utf-8');
+
+    const result = (await osintMatrixCommand.handler(
+      { file: txt, out_dir: outDir } as never,
+      {} as never,
+    )) as any;
+
+    expect(result.code).toBe('EMPTY_INPUT');
+    expect(result.error).toContain('No people found');
+  });
+
+  it('throws a clear ValidationError for malformed JSON', async () => {
+    await mkdir(fixtures, { recursive: true });
+    const bad = `${fixtures}/bad.json`;
+    await writeFile(bad, '{ "divisions": [', 'utf-8');
+
+    await expect(
+      osintMatrixCommand.handler({ file: bad, out_dir: outDir } as never, {} as never),
+    ).rejects.toThrow(/is not valid JSON/);
+  });
+});
 

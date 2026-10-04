@@ -263,5 +263,3 @@ export function detectPhase(data: unknown): number {
   }
   return 1;
 }
-
-// __HELPERS__

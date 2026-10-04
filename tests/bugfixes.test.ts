@@ -5,7 +5,7 @@ import { classifyDivision, cleanTitle } from '../src/osint/classify.js';
 import { output } from '../src/core/output.js';
 import { normalizeEmails } from '../src/osint/delve.js';
 import { createClient } from '../src/core/client.js';
-import { LinkedInError } from '../src/core/errors.js';
+import { formatError, LinkedInError } from '../src/core/errors.js';
 import type { LinkedInAuth } from '../src/core/types.js';
 
 function captureOutput(data: unknown, options: { fields?: string }): any {
@@ -142,3 +142,31 @@ describe('client retry semantics', () => {
     }
   });
 });
+
+describe('error code mapping', () => {
+  it('maps filesystem and JSON failures to stable codes', () => {
+    const enoent = Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' });
+    expect(formatError(enoent)).toEqual({
+      message: 'ENOENT: no such file',
+      code: 'FILE_NOT_FOUND',
+    });
+
+    const eacces = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+    expect(formatError(eacces).code).toBe('PERMISSION_DENIED');
+
+    const eisdir = Object.assign(new Error('EISDIR: illegal operation'), { code: 'EISDIR' });
+    expect(formatError(eisdir).code).toBe('NOT_A_FILE');
+
+    expect(formatError(new SyntaxError('Unexpected token')).code).toBe('INVALID_JSON');
+    expect(formatError(new Error('boom')).code).toBe('UNKNOWN_ERROR');
+    expect(formatError('a plain string').code).toBe('UNKNOWN_ERROR');
+  });
+
+  it('preserves codes from typed errors', () => {
+    expect(formatError(new LinkedInError('nope', 'CUSTOM_CODE'))).toEqual({
+      message: 'nope',
+      code: 'CUSTOM_CODE',
+    });
+  });
+});
+

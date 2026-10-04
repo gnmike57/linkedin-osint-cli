@@ -120,6 +120,6 @@ All Voyager API calls go to `https://www.linkedin.com/voyager/api`. The client h
 
 - All output is JSON to stdout (compact by default, `--pretty` for indented)
 - Errors go to stderr as JSON `{error, code}`
-- No interactive prompts in API commands — only `login` uses @inquirer/prompts
+- No interactive prompts in API commands — only the `menu` console and `login` prompt. `@inquirer/prompts` is an optional dependency; the console falls back to a built-in `node:readline` implementation when it is unavailable.
 - Path parameters use `{field}` template syntax in endpoint paths
 - CLI flags are kebab-case, input fields are snake_case

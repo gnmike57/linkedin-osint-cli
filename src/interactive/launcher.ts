@@ -88,8 +88,29 @@ function isBooleanField(cmd: CommandDefinition, field: string): boolean {
   return false;
 }
 
+/**
+ * Prefer @inquirer/prompts; fall back to the built-in readline console when
+ * the package is missing or incomplete (restricted registries, broken
+ * installs). The console must always be launchable.
+ */
+async function loadPrompts(): Promise<Prompts> {
+  try {
+    const mod = (await import('@inquirer/prompts')) as unknown as Partial<Prompts>;
+    if (typeof mod.input === 'function' && typeof mod.confirm === 'function' && typeof mod.select === 'function') {
+      return mod as Prompts;
+    }
+  } catch {
+    /* fall through to built-in */
+  }
+  console.log(
+    c.dim('  note: @inquirer/prompts unavailable — using the built-in console fallback\n'),
+  );
+  const { createFallbackPrompts } = await import('./readline-prompts.js');
+  return (await createFallbackPrompts()) as unknown as Prompts;
+}
+
 export async function runInteractiveMenu(options: { version: string }): Promise<void> {
-  const prompts = (await import('@inquirer/prompts')) as unknown as Prompts;
+  const prompts = await loadPrompts();
 
   const catalog = buildCatalog(allCommands);
   const totalCommands = catalog.reduce((n, g) => n + g.commands.length, 0);

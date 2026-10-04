@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PassThrough } from 'node:stream';
 import { allCommands } from '../src/commands/index.js';
 import {
   buildCatalog,
@@ -8,6 +9,7 @@ import {
   GROUP_META,
 } from '../src/interactive/catalog.js';
 import { bannerLines } from '../src/interactive/banner.js';
+import { createFallbackPrompts, parseSelection } from '../src/interactive/readline-prompts.js';
 
 describe('interactive catalog', () => {
   const catalog = buildCatalog(allCommands);
@@ -97,3 +99,54 @@ describe('banner', () => {
     expect(lines[1]).toContain('██╗');
   });
 });
+
+describe('built-in fallback console (readline)', () => {
+  it('parses 1-based numeric selections with bounds checks', () => {
+    expect(parseSelection('1', 3)).toBe(0);
+    expect(parseSelection(' 3 ', 3)).toBe(2);
+    expect(parseSelection('0', 3)).toBeNull();
+    expect(parseSelection('4', 3)).toBeNull();
+    expect(parseSelection('abc', 3)).toBeNull();
+    expect(parseSelection('', 3)).toBeNull();
+  });
+
+  it('never drops buffered lines and unwinds cleanly at EOF', async () => {
+    // Regression: piped input arrives in one burst; every line must be handed
+    // out in order (the old rl.question() implementation dropped them).
+    const input = new PassThrough();
+    const prompts = await createFallbackPrompts({ input });
+    input.write('anything\n1\nhello\ny\n');
+    input.end();
+
+    const picked = await prompts.search<string>({
+      message: 'filter',
+      source: async () => [
+        { name: 'A', value: 'A' },
+        { name: 'B', value: 'B' },
+      ],
+    });
+    expect(picked).toBe('A'); // choice "1"
+
+    await expect(prompts.input({ message: 'text' })).resolves.toBe('hello');
+    await expect(prompts.confirm({ message: 'ok?' })).resolves.toBe(true);
+    await expect(prompts.input({ message: 'after EOF' })).rejects.toMatchObject({
+      name: 'ExitPromptError',
+    });
+  });
+
+  it('retries invalid selections then gives up cleanly', async () => {
+    const input = new PassThrough();
+    const prompts = await createFallbackPrompts({ input });
+    input.write('nope\n2\n');
+    input.end();
+    const picked = await prompts.select<string>({
+      message: 'pick',
+      choices: [
+        { name: 'one', value: '1' },
+        { name: 'two', value: '2' },
+      ],
+    });
+    expect(picked).toBe('2');
+  });
+});
+
