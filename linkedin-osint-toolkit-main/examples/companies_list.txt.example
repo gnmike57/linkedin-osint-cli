@@ -1,0 +1,24 @@
+# Example company list for batch scraping
+# Add LinkedIn company URLs, one per line
+# Lines starting with # are comments
+
+# Technology Companies
+https://www.linkedin.com/company/acme-corp
+https://www.linkedin.com/company/example-tech
+https://www.linkedin.com/company/sample-software
+
+# Financial Services
+https://www.linkedin.com/company/example-bank
+https://www.linkedin.com/company/sample-insurance
+
+# Telecommunications
+https://www.linkedin.com/company/example-telecom
+https://www.linkedin.com/company/sample-mobile
+
+# Defense & Aerospace
+https://www.linkedin.com/company/example-defense
+https://www.linkedin.com/company/sample-aerospace
+
+# Consumer & Retail
+https://www.linkedin.com/company/example-retail
+https://www.linkedin.com/company/sample-foods

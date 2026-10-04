@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "linkedin-osint-toolkit"
+version = "0.8.0"
+description = "OSINT toolkit for LinkedIn company discovery, employee scraping, role classification, and org-chart generation."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+authors = []
+keywords = ["osint", "linkedin", "scraping", "reconnaissance", "org-chart"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+]
+dependencies = [
+    "selenium>=4.0.0",
+    "webdriver-manager>=4.0.0",
+    "python-dotenv>=1.0.0",
+    "groq>=0.28.0",
+]
+
+[project.urls]
+Repository = "https://github.com/OWNER/linkedin-osint-toolkit"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+# -- Tool configuration --------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py38"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
