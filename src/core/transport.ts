@@ -128,8 +128,13 @@ function curlImpersonateRequest(url: string, init: HttpRequestInit): Promise<Htt
     });
 
     if (init.body !== undefined) {
+      // If the binary dies instantly (bad install, ENOENT handled above), the
+      // stdin write can surface EPIPE on the stream — swallow it here so the
+      // process error path stays on the promise rejection.
+      child.stdin.on('error', () => {});
       child.stdin.write(init.body);
     }
+    child.stdin.on('error', () => {});
     child.stdin.end();
   });
 }
@@ -157,7 +162,10 @@ export function parseRawHttpResponse(raw: Buffer): HttpResponse {
     const split = findHeaderBodySplit(raw, lastHeadersStart);
     if (!split) break;
     const next = raw.subarray(split.idx + split.sepLen);
-    if (next.subarray(0, 5).toString('utf8') === 'HTTP/') {
+    // Only treat the following block as a new header block when it starts with
+    // a full HTTP status line ("HTTP/1.1 200 ...") — a response body that
+    // merely contains "\r\n\r\nHTTP/" must not be re-parsed as headers.
+    if (/^HTTP\/[\d.]+\s+\d{3}[\s\r\n]/.test(next.subarray(0, 64).toString('utf8'))) {
       lastHeadersStart = split.idx + split.sepLen;
       continue;
     }

@@ -260,4 +260,45 @@ describe('writeUsernameFiles', () => {
   });
 });
 
+describe('osint employees error resilience', () => {
+  const outDir = 'output_test_employees_err';
+
+  afterEach(async () => {
+    await rm(outDir, { recursive: true, force: true });
+  });
+
+  it('keeps partial output when the scrape aborts with a network error', async () => {
+    let pageCalls = 0;
+    const client = {
+      get: async (path: string) => {
+        if (path === '/organization/companies') return makeCompanyView('1035', 120);
+        pageCalls++;
+        if (pageCalls === 1) {
+          return makePeoplePayload([['First Person', 'Analyst']], 500);
+        }
+        throw new Error('session expired');
+      },
+    } as never;
+
+    const result = (await osintEmployeesCommand.handler(
+      {
+        company: 'testco',
+        geoblast: false,
+        out_dir: outDir,
+        format: 'json',
+        delay_ms: 0,
+      } as never,
+      client,
+    )) as any;
+
+    expect(result.error).toContain('session expired');
+    expect(result.total).toBe(1);
+    expect(result.employees[0].full_name).toBe('First Person');
+    expect(result.files.length).toBeGreaterThanOrEqual(1);
+    const master = JSON.parse(await readFile(result.files[0], 'utf-8'));
+    expect(master.error).toContain('session expired');
+    expect(master.employees).toHaveLength(1);
+  });
+});
+
 

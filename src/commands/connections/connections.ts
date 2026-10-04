@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import type { CommandDefinition } from '../../core/types.js';
-import { generateTrackingId } from '../../core/client.js';
 
 export const connectionsSendCommand: CommandDefinition = {
   name: 'connections_send',
@@ -122,7 +121,7 @@ export const connectionsAcceptCommand: CommandDefinition = {
 
   handler: async (input, client) => {
     return client.post(
-      `/relationships/invitations/${input.invitation_id}?action=accept`,
+      `/relationships/invitations/${encodeURIComponent(input.invitation_id)}?action=accept`,
       {
         invitationId: input.invitation_id,
         invitationSharedSecret: input.secret,
@@ -153,7 +152,7 @@ export const connectionsRejectCommand: CommandDefinition = {
 
   handler: async (input, client) => {
     return client.post(
-      `/relationships/invitations/${input.invitation_id}?action=ignore`,
+      `/relationships/invitations/${encodeURIComponent(input.invitation_id)}?action=ignore`,
       {
         invitationId: input.invitation_id,
         invitationSharedSecret: input.secret,
@@ -179,7 +178,7 @@ export const connectionsWithdrawCommand: CommandDefinition = {
   },
 
   handler: async (input, client) => {
-    return client.delete(`/relationships/invitations/${input.invitation_id}`);
+    return client.delete(`/relationships/invitations/${encodeURIComponent(input.invitation_id)}`);
   },
 };
 

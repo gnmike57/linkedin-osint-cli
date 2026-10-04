@@ -58,6 +58,11 @@ function esc(text: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/** Allow only http(s) URLs as href/src targets. */
+function safeHttpUrl(value: string): string {
+  return /^https?:\/\//i.test(value ?? '') ? value : '';
+}
+
 function initials(name: string): string {
   const parts = (name ?? '').trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -171,12 +176,17 @@ export function buildMatrixHtml(
           const avatars = cellPeople
             .map((p) => {
               const titleAttr = esc(`${p.name} — ${p.title} (${p.level}, ${p.department})`);
-              const img = p.imageUrl
-                ? `<img src="${esc(p.imageUrl)}" alt="${esc(p.name)}" loading="lazy">`
+              // Only http(s) URLs may become href/src targets — scraped data is
+              // untrusted and a javascript:/data: payload here would run inside
+              // the locally-opened HTML file.
+              const imgUrl = safeHttpUrl(p.imageUrl);
+              const linkUrl = safeHttpUrl(p.profileUrl);
+              const img = imgUrl
+                ? `<img src="${esc(imgUrl)}" alt="${esc(p.name)}" loading="lazy">`
                 : `<span class="initials" style="background:${LEVEL_COLORS[p.level] ?? '#95a5a6'}">${esc(p.initials)}</span>`;
               const inner = `<span class="avatar" style="border-color:${getDivisionColor(p.department)}">${img}</span>`;
-              return p.profileUrl
-                ? `<a href="${esc(p.profileUrl)}" target="_blank" rel="noopener" title="${titleAttr}">${inner}</a>`
+              return linkUrl
+                ? `<a href="${esc(linkUrl)}" target="_blank" rel="noopener" title="${titleAttr}">${inner}</a>`
                 : `<span title="${titleAttr}">${inner}</span>`;
             })
             .join('');
@@ -200,7 +210,6 @@ export function buildMatrixHtml(
     )
     .join('');
 
-  // __TEMPLATE__
   const html = renderPage({ rootLabel, people, activeDepts, rowsHtml, colHeaders, execCount, mgmtCount });
   return html;
 }

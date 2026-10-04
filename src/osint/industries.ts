@@ -37,14 +37,36 @@ export const INDUSTRY_CATEGORIES: Record<string, string[]> = {
   Other: [],
 };
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// (category, keyword) pairs ordered by keyword length descending so that
+// specific phrases beat generic words ("national security" → Intelligence
+// wins over "security" → Cybersecurity regardless of category order).
+const ORDERED_INDUSTRY_KEYWORDS: Array<{ category: string; rx: RegExp }> = (
+  Object.entries(INDUSTRY_CATEGORIES) as Array<[string, string[]]>
+)
+  .flatMap(([category, keywords]) =>
+    keywords.map((keyword) => ({
+      category,
+      keyword,
+    })),
+  )
+  .sort((a, b) => b.keyword.length - a.keyword.length)
+  .map(({ category, keyword }) => ({
+    category,
+    // Word-start boundary so "technology" doesn't fire inside "biotechnology"
+    // or "intelligent systems" inside "unintelligent".
+    rx: new RegExp(`\\b${escapeRegExp(keyword)}`, 'i'),
+  }));
+
 /** Normalize a raw LinkedIn industry string to a standard category name. */
 export function classifyIndustry(rawIndustry: string | undefined | null): string {
   if (!rawIndustry || rawIndustry === 'Unknown') return 'Unknown';
   const rawLower = rawIndustry.toLowerCase();
-  for (const [category, keywords] of Object.entries(INDUSTRY_CATEGORIES)) {
-    for (const keyword of keywords) {
-      if (rawLower.includes(keyword)) return category;
-    }
+  for (const { category, rx } of ORDERED_INDUSTRY_KEYWORDS) {
+    if (rx.test(rawLower)) return category;
   }
   return 'Other';
 }

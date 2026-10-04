@@ -32,6 +32,26 @@ describe('parseRawHttpResponse', () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('{"firstName":"Ada"}');
   });
+  it('keeps the body intact when it literally contains "\\r\\n\\r\\nHTTP/"', async () => {
+    const body = '{"note":"x"}\r\n\r\nHTTP/is a substring, not a header';
+    const raw = Buffer.from(
+      'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n' + body,
+    );
+    const res = parseRawHttpResponse(raw);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(body);
+  });
+
+  it('strips genuine interim 100-continue header blocks', async () => {
+    const raw = Buffer.from(
+      'HTTP/1.1 100 Continue\r\n\r\n' +
+        'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{"ok":true}',
+    );
+    const res = parseRawHttpResponse(raw);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('{"ok":true}');
+  });
+
 });
 
 describe('useCurlImpersonate', () => {

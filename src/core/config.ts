@@ -2,7 +2,10 @@ import { readFile, writeFile, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-const CONFIG_DIR = join(homedir(), '.linkedin-cli');
+// Honor XDG_CONFIG_HOME on Linux/macOS; fall back to ~/.linkedin-cli.
+const CONFIG_DIR = process.env.XDG_CONFIG_HOME
+  ? join(process.env.XDG_CONFIG_HOME, 'linkedin-cli')
+  : join(homedir(), '.linkedin-cli');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
 export interface LinkedInConfig {
@@ -15,7 +18,10 @@ export interface LinkedInConfig {
 export async function loadConfig(): Promise<LinkedInConfig | null> {
   try {
     const content = await readFile(CONFIG_FILE, 'utf-8');
-    return JSON.parse(content) as LinkedInConfig;
+    const parsed = JSON.parse(content) as LinkedInConfig;
+    // Legacy configs may carry a quoted jsessionid — normalize on load.
+    parsed.jsessionid = parsed.jsessionid.replace(/^"/, '').replace(/"$/, '');
+    return parsed;
   } catch {
     return null;
   }

@@ -15,15 +15,6 @@ export interface CommandDefinition<TInput extends z.ZodObject<any> = z.ZodObject
   inputSchema: TInput;
   /** Maps Zod fields to CLI args/options */
   cliMappings: CliMapping;
-  /** HTTP endpoint (for standard CRUD via executeCommand) */
-  endpoint?: {
-    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
-    path: string;
-  };
-  /** Where each field goes in the HTTP request */
-  fieldMappings?: Record<string, 'path' | 'query' | 'body'>;
-  /** Whether this endpoint returns paginated results */
-  paginated?: boolean;
   /** Handler function — called for both CLI and MCP */
   handler: (input: any, client: LinkedInClient) => Promise<unknown>;
 }

@@ -129,76 +129,84 @@ export const osintEmployeesCommand: CommandDefinition = {
     const employeesMap = new Map<string, { full_name: string; occupation: string }>();
     const loopResults: Array<{ label: string; pages: number; found: number; stopped: string }> = [];
     let upsellHit = false;
+    let scrapeError: string | undefined;
     const depth = inputAny.depth ?? defaultDepth(staffCount);
 
     for (const loop of outerLoops) {
       let pagesUsed = 0;
       let stopped = 'depth';
-      for (let page = 0; page < depth; page++) {
-        if (inputAny.max_profiles && employeesMap.size >= inputAny.max_profiles) {
-          stopped = 'max_profiles';
-          break;
-        }
-
-        const variables = buildEmployeesVariables({
-          companyId,
-          page,
-          region: loop.region || undefined,
-          keyword: loop.keyword || undefined,
-        });
-
-        let data: unknown;
         try {
-          data = await client.get<unknown>('/graphql', {
-            variables,
-            queryId: inputAny.query_id ?? EMPLOYEES_QUERY_ID,
+        for (let page = 0; page < depth; page++) {
+          if (inputAny.max_profiles && employeesMap.size >= inputAny.max_profiles) {
+            stopped = 'max_profiles';
+            break;
+          }
+  
+          const variables = buildEmployeesVariables({
+            companyId,
+            page,
+            region: loop.region || undefined,
+            keyword: loop.keyword || undefined,
           });
-        } catch (err) {
-          const status = (err as { statusCode?: number }).statusCode;
-          if (status && status !== 429 && status < 500) {
-            stopped = `HTTP ${status}`;
-            break;
+  
+          let data: unknown;
+          try {
+            data = await client.get<unknown>('/graphql', {
+              variables,
+              queryId: inputAny.query_id ?? EMPLOYEES_QUERY_ID,
+            });
+          } catch (err) {
+            const status = (err as { statusCode?: number }).statusCode;
+            if (status && status !== 429 && status < 500) {
+              stopped = `HTTP ${status}`;
+              break;
+            }
+            throw err;
           }
-          throw err;
+  
+          // Non-JSON body (client falls back to raw text) vs parsed payload
+          if (typeof data === 'string') {
+            const parsed = parseEmployeesResponse(data);
+            if (parsed.upsellLimit) {
+              upsellHit = true;
+              stopped = 'UPSELL_LIMIT';
+              break;
+            }
+            if (parsed.jsonError) {
+              stopped = 'non-JSON response';
+              break;
+            }
+            for (const emp of parsed.employees) {
+              if (!employeesMap.has(emp.full_name)) employeesMap.set(emp.full_name, emp);
+            }
+          } else {
+            if (JSON.stringify(data).includes('UPSELL_LIMIT')) {
+              upsellHit = true;
+              stopped = 'UPSELL_LIMIT';
+              break;
+            }
+            const parsed = parseEmployeesPayload(data);
+            if (parsed.employees.length === 0) {
+              stopped = 'end of results';
+              break;
+            }
+            for (const emp of parsed.employees) {
+              if (!employeesMap.has(emp.full_name)) employeesMap.set(emp.full_name, emp);
+            }
+          }
+  
+          pagesUsed++;
+          await sleep(inputAny.delay_ms);
         }
-
-        // Non-JSON body (client falls back to raw text) vs parsed payload
-        if (typeof data === 'string') {
-          const parsed = parseEmployeesResponse(data);
-          if (parsed.upsellLimit) {
-            upsellHit = true;
-            stopped = 'UPSELL_LIMIT';
-            break;
-          }
-          if (parsed.jsonError) {
-            stopped = 'non-JSON response';
-            break;
-          }
-          for (const emp of parsed.employees) {
-            if (!employeesMap.has(emp.full_name)) employeesMap.set(emp.full_name, emp);
-          }
-        } else {
-          if (JSON.stringify(data).includes('UPSELL_LIMIT')) {
-            upsellHit = true;
-            stopped = 'UPSELL_LIMIT';
-            break;
-          }
-          const parsed = parseEmployeesPayload(data);
-          if (parsed.employees.length === 0) {
-            stopped = 'end of results';
-            break;
-          }
-          for (const emp of parsed.employees) {
-            if (!employeesMap.has(emp.full_name)) employeesMap.set(emp.full_name, emp);
-          }
-        }
-
-        pagesUsed++;
-        await sleep(inputAny.delay_ms);
+      } catch (err) {
+        // Fatal mid-scrape error (exhausted retries, dead session). Keep
+        // everything scraped so far — fall through to writing partial outputs.
+        scrapeError = (err as Error)?.message ?? String(err);
+        stopped = 'error';
       }
 
       loopResults.push({ label: loop.label, pages: pagesUsed, found: employeesMap.size, stopped });
-      if (stopped === 'UPSELL_LIMIT' || stopped === 'max_profiles') break;
+      if (stopped === 'UPSELL_LIMIT' || stopped === 'max_profiles' || stopped === 'error') break;
       if (outerLoops.length === 1 && stopped !== 'depth') break;
     }
 
@@ -232,6 +240,7 @@ export const osintEmployeesCommand: CommandDefinition = {
               staff_count: staffCount || undefined,
               total: employees.length,
               loops: loopResults,
+              error: scrapeError ?? undefined,
               employees,
             },
             null,
@@ -258,6 +267,7 @@ export const osintEmployeesCommand: CommandDefinition = {
       staff_count: staffCount || undefined,
       total: employees.length,
       upsell_limit: upsellHit || undefined,
+      error: scrapeError,
       loops: loopResults,
       files,
       employees,
@@ -289,9 +299,12 @@ export async function writeUsernameFiles(
     await writeOutputFile(
       outDir,
       `${company}-metadata.txt`,
-      'full_name,occupation\n' +
-        employees.map((e) => `${e.full_name},${e.occupation}`).join('\n') +
-        '\n',
+      // CSV-escape names/occupations — an occupation with a comma would
+      // otherwise corrupt every column to its right.
+      stringifyCsv(
+        employees.map((e) => ({ full_name: e.full_name, occupation: e.occupation })),
+        ['full_name', 'occupation'],
+      ),
     ),
   );
 

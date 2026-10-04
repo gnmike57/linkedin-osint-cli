@@ -23,9 +23,18 @@ export function output(data: unknown, options: GlobalOptions = {}): void {
     } else {
       const obj = data as Record<string, unknown>;
       if (Array.isArray(obj.elements)) {
-        result = (obj.elements as Record<string, unknown>[]).map((item) => pickFields(item, fields));
+        // Map fields inside the collection but keep pagination/summary metadata
+        result = {
+          ...obj,
+          elements: (obj.elements as Record<string, unknown>[]).map((item) =>
+            pickFields(item, fields),
+          ),
+        };
       } else if (Array.isArray(obj.items)) {
-        result = (obj.items as Record<string, unknown>[]).map((item) => pickFields(item, fields));
+        result = {
+          ...obj,
+          items: (obj.items as Record<string, unknown>[]).map((item) => pickFields(item, fields)),
+        };
       } else {
         result = pickFields(obj, fields);
       }

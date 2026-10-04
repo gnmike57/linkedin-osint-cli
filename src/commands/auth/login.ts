@@ -49,18 +49,22 @@ export function registerLoginCommand(program: Command): void {
 
         // Interactive mode if cookies not provided as flags and not reading Chrome
         if (!fromChrome && (!liAt || !jsessionid)) {
-          const { input: promptInput } = await import('@inquirer/prompts');
+          const { password: promptPassword } = await import('@inquirer/prompts');
 
           if (!liAt) {
-            liAt = await promptInput({
+            liAt = await promptPassword({
               message: 'Paste your li_at cookie value (from browser DevTools → Application → Cookies → linkedin.com):',
+              mask: '*',
             });
           }
           if (!jsessionid) {
-            jsessionid = await promptInput({
+            jsessionid = await promptPassword({
               message: 'Paste your JSESSIONID cookie value (include the quotes if present):',
+              mask: '*',
             });
           }
+          liAt = liAt.trim();
+          jsessionid = jsessionid.trim();
         }
 
         if (!liAt || !jsessionid) {

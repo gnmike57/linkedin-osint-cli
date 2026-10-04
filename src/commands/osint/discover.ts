@@ -13,12 +13,13 @@ import type { CommandDefinition } from '../../core/types.js';
 import { SEARCH_CLUSTERS_QUERY_ID } from '../search/search.js';
 import { resolveGeo, GEO_CODES } from '../../osint/geo-codes.js';
 import { classifyIndustry } from '../../osint/industries.js';
+import { sanitizeGroupedTerm } from '../../osint/employees-query.js';
 import { fileTimestamp, writeOutputFile } from './util.js';
 
 const inputSchema = z.object({
   geo: z.string().describe('Region name (e.g., USA) or LinkedIn geo code'),
   keyword: z.string().optional().describe('Search keyword (e.g., cybersecurity, fintech)'),
-  industry: z.string().optional().describe('Filter by industry category (see docs/REFERENCE)'),
+  industry: z.string().optional().describe('Filter by industry category (see osint industries taxonomy)'),
   limit: z.coerce.number().min(1).max(100).default(10).describe('Max companies to discover'),
   region_name: z.string().default('region').describe('Region label for the output filename'),
   out_dir: z.string().default('output').describe('Output directory'),
@@ -80,47 +81,71 @@ export const osintDiscoverCommand: CommandDefinition = {
       '(key:resultType,value:List(COMPANIES))',
       `(key:companyHqGeo,value:List(${geoCode}))`,
     ];
-    const keywords = inputAny.keyword ? encodeURIComponent(inputAny.keyword) : '';
-    const variables =
-      `(start:0,origin:GLOBAL_SEARCH_HEADER,query:(keywords:${keywords},` +
+    const keywords = inputAny.keyword ? sanitizeGroupedTerm(inputAny.keyword) : '';
+    const buildVariables = (start: number) =>
+      `(start:${start},origin:GLOBAL_SEARCH_HEADER,query:(keywords:${keywords},` +
       'flagshipSearchIntent:SEARCH_SRP,' +
       `queryParameters:List(${filters.join(',')}),` +
       'includeFiltersInResponse:false))';
 
-    const response = await client.get<unknown>('/graphql', {
-      variables,
-      queryId: inputAny.query_id ?? SEARCH_CLUSTERS_QUERY_ID,
-    });
+    // Paginate the company search until `limit` is satisfied (one page only
+    // yields a handful of companies, so --limit 50/100 would be silently
+    // truncated otherwise).
+    const PAGE_SIZE = 49;
+    let start = 0;
 
     // Extract companies from the entityResult clusters (defensive parsing)
     const companies: Array<Record<string, unknown>> = [];
     const seen = new Set<string>();
-    const clusters = (response as any)?.data?.searchDashClustersByAll ?? {};
-    for (const element of clusters?.elements ?? []) {
-      for (const itemBody of element?.items ?? []) {
-        const entity = itemBody?.item?.entityResult;
-        if (!entity) continue;
-        const name = String(entity?.title?.text ?? '').trim();
-        if (!name || name.toLowerCase() === 'linkedin member') continue;
-        if (seen.has(name.toLowerCase())) continue;
-        seen.add(name.toLowerCase());
 
-        const subtitle = String(entity?.primarySubtitle?.text ?? '');
-        const industryRaw = subtitle.split('\n')[0]?.trim() ?? '';
-        const location = subtitle.split('\n').slice(1).join(', ').trim();
+    pageLoop: while (companies.length < inputAny.limit) {
+      const response = await client.get<unknown>('/graphql', {
+        variables: buildVariables(start),
+        queryId: inputAny.query_id ?? SEARCH_CLUSTERS_QUERY_ID,
+      });
 
-        companies.push({
-          name,
-          subtitle,
-          industry: classifyIndustry(industryRaw),
-          industry_raw: industryRaw,
-          location,
-          url: `https://www.linkedin.com/company/${slugify(name)}`,
-          entity,
-        });
-        if (companies.length >= inputAny.limit) break;
+      const clusters = (response as any)?.data?.searchDashClustersByAll ?? {};
+      const pageCountBefore = companies.length;
+
+      for (const element of clusters?.elements ?? []) {
+        for (const itemBody of element?.items ?? []) {
+          const entity = itemBody?.item?.entityResult;
+          if (!entity) continue;
+          const name = String(entity?.title?.text ?? '').trim();
+          if (!name || name.toLowerCase() === 'linkedin member') continue;
+          if (seen.has(name.toLowerCase())) continue;
+          seen.add(name.toLowerCase());
+
+          const subtitle = String(entity?.primarySubtitle?.text ?? '');
+          const industryRaw = subtitle.split('\n')[0]?.trim() ?? '';
+          const location = subtitle.split('\n').slice(1).join(', ').trim();
+
+          // Prefer the real universalName from navigationUrl; only fall back to
+          // a slugified display name when LinkedIn didn't include the URL — the
+          // next funnel phase resolves companies via this URL, and a guessed
+          // slug silently points at the wrong (or a nonexistent) company.
+          const navUrl = String(entity?.navigationUrl ?? '');
+          const navMatch = navUrl.match(/linkedin\.com\/company\/([^/?#\s"'<>]+)/);
+          const url = navMatch
+            ? `https://www.linkedin.com/company/${navMatch[1]}`
+            : `https://www.linkedin.com/company/${slugify(name)}`;
+
+          companies.push({
+            name,
+            subtitle,
+            industry: classifyIndustry(industryRaw),
+            industry_raw: industryRaw,
+            location,
+            url,
+            entity,
+          });
+          if (companies.length >= inputAny.limit) break pageLoop;
+        }
       }
-      if (companies.length >= inputAny.limit) break;
+
+      // Empty page → end of results; stop before looping forever.
+      if (companies.length === pageCountBefore) break;
+      start += PAGE_SIZE;
     }
 
     // Optional AI relevance scoring

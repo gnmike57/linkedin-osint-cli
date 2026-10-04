@@ -112,8 +112,21 @@ export function cleanTitle(title: string): string {
   cleaned = cleaned.replace(/\s*\(former\s+known\s+.*$/i, '');
   cleaned = cleaned.replace(/\s*\([^)]{15,}\)\s*$/, '');
 
-  // Strip trailing "- COMPANY" patterns (case-sensitive in the original)
-  cleaned = cleaned.replace(/\s+-\s+[A-Z][A-Za-z\s.]+$/, '');
+  // Strip trailing "- COMPANY" tails, but only when the tail actually looks
+  // like a company name: ALL-CAPS ("- STRIPE", "- GOOGLE INC") or ending in a
+  // corporate marker (Inc/LLC/Ltd/GmbH/Corp/…). Mixed-case tails like
+  // "- Customer Success" carry real division keywords and are kept.
+  cleaned = cleaned.replace(
+    /\s+-\s+([A-Z][A-Z0-9a-z\s.&]*)$/,
+    (whole, tail: string) => {
+      const hasLowercase = /[a-z]/.test(tail);
+      const corporateMarker =
+        /\b(inc|llc|ltd|gmbh|corp|corporation|company|co|group|plc|pty|srl|bv|ab|ag|se|s\.a)\.?$/i.test(
+          tail,
+        );
+      return !hasLowercase || corporateMarker ? '' : whole;
+    },
+  );
 
   return cleaned.trim();
 }

@@ -16,6 +16,22 @@ export const DELVE_PROFILE_URL =
 
 export const DEFAULT_MAX_CONSECUTIVE_FAILURES = 10;
 
+/**
+ * Normalize raw email-list lines ("Alice,a@x.com" CSV pairs, whitespace) into
+ * bare email addresses. Keeps the legacy toolkit's "name,email" intake.
+ */
+export function normalizeEmails(lines: string[]): string[] {
+  const emails: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    // "name,email" → keep only the email column
+    const email = trimmed.includes(',') ? (trimmed.split(',').pop()?.trim() ?? '') : trimmed;
+    if (email) emails.push(email);
+  }
+  return emails;
+}
+
 /** Build the Delve LivePersonaCard lookup URL for one email. */
 export function buildDelveUrl(email: string): string {
   const params = new URLSearchParams({
@@ -178,6 +194,12 @@ export async function lookupDelveEmails(
 
     if (result.found) {
       consecutiveFailures = 0;
+    } else if (
+      result.error &&
+      (result.error.includes('socket hang up') || result.error.includes('ECONNRESET'))
+    ) {
+      // Connectivity blips aren't evidence of an expired token — the circuit
+      // breaker exists to catch token expiry, so these don't count.
     } else {
       consecutiveFailures++;
       if (consecutiveFailures >= maxFailures) {

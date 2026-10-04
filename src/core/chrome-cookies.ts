@@ -151,19 +151,24 @@ export async function loadLinkedInCookiesFromChrome(
   // sidecar files (Chrome runs in WAL mode — recent writes live in the -wal file).
   const tmpDir = mkdtempSync(join(tmpdir(), 'linkedin-cli-chrome-'));
   const tmpDb = join(tmpDir, 'Cookies');
-  copyFileSync(dbPath, tmpDb);
-  for (const suffix of ['-wal', '-shm']) {
-    const sidecar = `${dbPath}${suffix}`;
-    if (existsSync(sidecar)) copyFileSync(sidecar, `${tmpDb}${suffix}`);
-  }
 
   let rows: string;
   try {
+    copyFileSync(dbPath, tmpDb);
+    for (const suffix of ['-wal', '-shm']) {
+      const sidecar = `${dbPath}${suffix}`;
+      if (existsSync(sidecar)) copyFileSync(sidecar, `${tmpDb}${suffix}`);
+    }
+
     rows = querySqlite(
       tmpDb,
+      // Match linkedin.com itself and its subdomains only — a bare
+      // LIKE '%linkedin.com' would also scoop up cookies from lookalike
+      // hosts such as "evil-linkedin.com", and those values would end up
+      // inside the cookie jar we send to LinkedIn.
       `SELECT name, hex(encrypted_value), host_key
        FROM cookies
-       WHERE host_key LIKE '%linkedin.com'
+       WHERE host_key = 'linkedin.com' OR host_key LIKE '%.linkedin.com'
        ORDER BY rowid;`,
     );
   } finally {

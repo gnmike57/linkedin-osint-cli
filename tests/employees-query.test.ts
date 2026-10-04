@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   buildEmployeesVariables,
-  buildEmployeesUrl,
   parseEmployeesResponse,
   defaultDepth,
   EMPLOYEES_PAGE_SIZE,
@@ -26,15 +25,25 @@ describe('buildEmployeesVariables', () => {
     expect(v).toContain('(start:150,');
   });
 
-  it('encodes keyword spaces and includes geo filter', () => {
+  it('keeps keywords unencoded and includes geo filter (transport encodes once)', () => {
     const v = buildEmployeesVariables({
       companyId: '1035',
       page: 0,
       keyword: 'human resources',
       region: '103644278',
     });
-    expect(v).toContain('keywords:human%20resources,');
+    expect(v).toContain('keywords:human resources,');
+    expect(v).not.toContain('%20');
     expect(v).toContain('(key:geoUrn,value:List(103644278))');
+  });
+
+  it('strips grouped-syntax metacharacters from keywords', () => {
+    const v = buildEmployeesVariables({
+      companyId: '1035',
+      page: 0,
+      keyword: 'sales, ops (lead)',
+    });
+    expect(v).toContain('keywords:sales ops lead,');
   });
 
   it('omits keyword and region when not provided', () => {
@@ -44,11 +53,8 @@ describe('buildEmployeesVariables', () => {
   });
 });
 
-describe('buildEmployeesUrl', () => {
-  it('targets the voyager graphql endpoint with the verified queryId', () => {
-    const url = buildEmployeesUrl({ companyId: '1035', page: 0 });
-    expect(url.startsWith('https://www.linkedin.com/voyager/api/graphql?variables=')).toBe(true);
-    expect(url).toContain(`queryId=${EMPLOYEES_QUERY_ID}`);
+describe('EMPLOYEES_QUERY_ID', () => {
+  it('targets the voyager graphql searchDashClusters queryId', () => {
     expect(EMPLOYEES_QUERY_ID).toBe(
       'voyagerSearchDashClusters.66adc6056cf4138949ca5dcb31bb1749',
     );

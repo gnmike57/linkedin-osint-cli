@@ -187,6 +187,11 @@ export async function scoreCompanies(
 
     const response = await aiChat(systemPrompt, userPrompt);
     const results = parseAiJsonArray(response);
+    if (!response.trim() || results.length === 0) {
+      console.error(
+        `[AI] Batch starting at #${i + 1} produced no usable scores (empty or unparseable response)`,
+      );
+    }
 
     for (const r of results) {
       const idx = Number(r.index) - 1;
@@ -195,6 +200,11 @@ export async function scoreCompanies(
       if (r.score !== undefined) target.ai_relevance_score = Number(r.score);
       if (r.reasoning !== undefined) target.ai_reasoning = String(r.reasoning);
     }
+  }
+
+  const scored = batch.filter((c) => c.ai_relevance_score !== undefined).length;
+  if (scored < batch.length) {
+    console.error(`[AI] Scored ${scored}/${batch.length} companies (rest left unscored)`);
   }
 
   return batch.sort(

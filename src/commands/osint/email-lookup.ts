@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises';
 import type { CommandDefinition } from '../../core/types.js';
 import {
   lookupDelveEmails,
+  normalizeEmails,
   DEFAULT_MAX_CONSECUTIVE_FAILURES,
 } from '../../osint/delve.js';
 import { fileTimestamp, writeOutputFile } from './util.js';
@@ -75,7 +76,7 @@ export const osintEmailLookupCommand: CommandDefinition = {
     let emails: string[] = [];
     if (inputAny.file) {
       const content = await readFile(inputAny.file, 'utf-8');
-      emails = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      emails = normalizeEmails(content.split(/\r?\n/));
     } else if (inputAny.email) {
       emails = [inputAny.email];
     } else {

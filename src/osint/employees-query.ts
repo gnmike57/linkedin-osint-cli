@@ -26,10 +26,20 @@ export interface EmployeesQueryOptions {
   count?: number;
 }
 
+/**
+ * Strip characters that terminate or corrupt LinkedIn's grouped-query syntax
+ * `(key:...,value:List(...))` — commas close the current parameter and parens
+ * break nesting. Values are inserted raw (the HTTP transport URL-encodes the
+ * whole `variables` string exactly once), so never encodeURIComponent these.
+ */
+export function sanitizeGroupedTerm(value: string): string {
+  return value.replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 /** Build the `variables=(...)` payload for the people search. */
 export function buildEmployeesVariables(opts: EmployeesQueryOptions): string {
   const count = opts.count ?? EMPLOYEES_PAGE_SIZE;
-  const keyword = opts.keyword ? `keywords:${encodeURIComponent(opts.keyword)},` : '';
+  const keyword = opts.keyword ? `keywords:${sanitizeGroupedTerm(opts.keyword)},` : '';
   const region = opts.region ? `(key:geoUrn,value:List(${opts.region})),` : '';
   return (
     `(start:${opts.page * count},` +
@@ -43,18 +53,6 @@ export function buildEmployeesVariables(opts: EmployeesQueryOptions): string {
     '),' +
     'includeFiltersInResponse:false' +
     `),count:${count})`
-  );
-}
-
-/** Full Voyager GraphQL URL for a people-search page. */
-export function buildEmployeesUrl(
-  opts: EmployeesQueryOptions,
-  queryId: string = EMPLOYEES_QUERY_ID,
-): string {
-  return (
-    'https://www.linkedin.com/voyager/api/graphql' +
-    `?variables=${encodeURIComponent(buildEmployeesVariables(opts))}` +
-    `&queryId=${queryId}`
   );
 }
 

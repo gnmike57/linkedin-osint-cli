@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import type { CommandDefinition } from '../../core/types.js';
 import { generateTrackingId } from '../../core/client.js';
 
@@ -68,7 +69,7 @@ export const messagingMessagesCommand: CommandDefinition = {
     if (input.before) {
       query.createdBefore = input.before;
     }
-    return client.get(`/messaging/conversations/${input.conversation_id}/events`, query);
+    return client.get(`/messaging/conversations/${encodeURIComponent(input.conversation_id)}/events`, query);
   },
 };
 
@@ -93,10 +94,10 @@ export const messagingSendCommand: CommandDefinition = {
 
   handler: async (input, client) => {
     return client.post(
-      `/messaging/conversations/${input.conversation_id}/events?action=create`,
+      `/messaging/conversations/${encodeURIComponent(input.conversation_id)}/events?action=create`,
       {
         eventCreate: {
-          originToken: crypto.randomUUID(),
+          originToken: randomUUID(),
           value: {
             'com.linkedin.voyager.messaging.create.MessageCreate': {
               attributedBody: {
@@ -143,7 +144,7 @@ export const messagingSendNewCommand: CommandDefinition = {
       keyVersion: 'LEGACY_INBOX',
       conversationCreate: {
         eventCreate: {
-          originToken: crypto.randomUUID(),
+          originToken: randomUUID(),
           value: {
             'com.linkedin.voyager.messaging.create.MessageCreate': {
               attributedBody: {
@@ -178,7 +179,7 @@ export const messagingMarkReadCommand: CommandDefinition = {
   },
 
   handler: async (input, client) => {
-    return client.post(`/messaging/conversations/${input.conversation_id}`, {
+    return client.post(`/messaging/conversations/${encodeURIComponent(input.conversation_id)}`, {
       patch: {
         $set: {
           read: true,

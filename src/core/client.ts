@@ -1,3 +1,4 @@
+import { webcrypto } from 'node:crypto';
 import type { LinkedInAuth, LinkedInClient } from './types.js';
 import { httpRequest } from './transport.js';
 import { classifyLinkedInRedirect } from './redirects.js';
@@ -18,16 +19,19 @@ const MAX_RETRIES = 3;
 const TIMEOUT_MS = 30_000;
 const MIN_REQUEST_GAP_MS = 2_000;
 
-/** Human-like delay to avoid rate limits (2-5s) */
+// Node 18 lacks the global `crypto` WebCrypto object — fall back to node:crypto
+const webCrypto = globalThis.crypto ?? (webcrypto as unknown as NonNullable<typeof globalThis.crypto>);
+
+/** Human-like delay to avoid rate limits (2-5s; 1ms under vitest) */
 function randomDelay(): Promise<void> {
-  const ms = 2000 + Math.random() * 3000;
+  const ms = process.env.VITEST ? 1 : 2000 + Math.random() * 3000;
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Generate a random tracking ID (16 random bytes, base64) */
 export function generateTrackingId(): string {
   const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
+  webCrypto.getRandomValues(bytes);
   return Buffer.from(bytes).toString('base64');
 }
 
@@ -61,8 +65,14 @@ export function createClient(auth: LinkedInAuth): LinkedInClient {
   };
 
   let lastRequestTime = 0;
+  /**
+   * Serialize requests through a promise chain so concurrent callers (parallel
+   * fetches, MCP tool calls) still honor the minimum gap — otherwise N requests
+   * issued at once all pass the gap check and burst at LinkedIn.
+   */
+  let requestChain: Promise<unknown> = Promise.resolve();
 
-  async function request<T = unknown>(options: {
+  async function performRequest<T = unknown>(options: {
     method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
     path: string;
     query?: Record<string, string | number | boolean | undefined>;
@@ -108,14 +118,17 @@ export function createClient(auth: LinkedInAuth): LinkedInClient {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-        const response = await httpRequest(url, {
-          method: options.method,
-          headers,
-          body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeout);
+        let response: Awaited<ReturnType<typeof httpRequest>>;
+        try {
+          response = await httpRequest(url, {
+            method: options.method,
+            headers,
+            body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
         lastRequestTime = Date.now();
 
         const redirectError = classifyLinkedInRedirect(
@@ -194,7 +207,10 @@ export function createClient(auth: LinkedInAuth): LinkedInClient {
         }
         if (error instanceof TypeError && error.message.includes('fetch')) {
           lastError = new LinkedInError('Network error: unable to connect', 'NETWORK_ERROR');
-          if (attempt < MAX_RETRIES) continue;
+          // Only idempotent GETs are safe to retry — a failed write may have
+          // executed server-side, and retrying it duplicates the write.
+          if (options.method === 'GET' && attempt < MAX_RETRIES) continue;
+          throw lastError;
         }
         if (error instanceof DOMException && error.name === 'AbortError') {
           lastError = new LinkedInError('Request timed out', 'TIMEOUT');
@@ -206,13 +222,29 @@ export function createClient(auth: LinkedInAuth): LinkedInClient {
         }
         if (error instanceof Error && !(error instanceof LinkedInError)) {
           lastError = error;
-          if (attempt < MAX_RETRIES) continue;
+          if (options.method === 'GET' && attempt < MAX_RETRIES) continue;
         }
         throw error;
       }
     }
 
     throw lastError ?? new LinkedInError('Request failed after retries', 'MAX_RETRIES');
+  }
+
+  function request<T = unknown>(options: {
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+    path: string;
+    query?: Record<string, string | number | boolean | undefined>;
+    body?: unknown;
+    baseRequest?: boolean;
+  }): Promise<T> {
+    const result = requestChain.then(() => performRequest<T>(options));
+    // Keep the chain alive regardless of individual request outcome
+    requestChain = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   return {

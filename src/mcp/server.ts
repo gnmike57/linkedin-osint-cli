@@ -1,16 +1,48 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { allCommands } from '../commands/index.js';
-import { resolveAuth } from '../core/auth.js';
-import { createClient } from '../core/client.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { allCommands, createLazyClient } from '../commands/index.js';
+import type { CommandDefinition } from '../core/types.js';
+
+// Resolve the server version from package.json so it never drifts again.
+// Layout differs between src/ (../../package.json) and the tsup bundle
+// (dist/index.js → ../package.json) — probe both.
+function resolvePackageVersion(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  for (const rel of ['../../package.json', '../package.json']) {
+    const candidate = join(here, rel);
+    if (existsSync(candidate)) {
+      try {
+        const parsed = JSON.parse(readFileSync(candidate, 'utf-8')) as { version?: string };
+        if (parsed.version) return parsed.version;
+      } catch {
+        /* try next candidate */
+      }
+    }
+  }
+  return '0.0.0';
+}
+const packageVersion = resolvePackageVersion();
+
+/**
+ * MCP tool name → command definition. Exported so tests can assert tool
+ * registration without booting stdio transport.
+ */
+export const commandToTool: Map<string, CommandDefinition> = new Map(
+  allCommands.map((cmd) => [cmd.name, cmd]),
+);
 
 export async function startMcpServer(): Promise<void> {
-  const auth = await resolveAuth();
-  const client = createClient(auth);
+  // Auth is resolved lazily on the first network-touching tool call so the
+  // fully-offline OSINT tools (osint_classify / osint_names / osint_matrix /
+  // osint_stats / osint_scan) work without cookies.
+  const client = createLazyClient({});
 
   const server = new McpServer({
     name: 'linkedin',
-    version: '0.1.0',
+    version: packageVersion,
   });
 
   // Register every CommandDefinition as an MCP tool

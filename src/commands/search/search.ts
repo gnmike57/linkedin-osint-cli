@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { CommandDefinition } from '../../core/types.js';
 import { LinkedInError } from '../../core/errors.js';
+import { sanitizeGroupedTerm } from '../../osint/employees-query.js';
 
 /** Last queryId this CLI used for people/company/content SRP. CONTENT no longer returns posts. */
 export const SEARCH_CLUSTERS_QUERY_ID = 'voyagerSearchDashClusters.b0928897b71bd00a5a7291755dcd64f0';
@@ -59,13 +60,13 @@ export const searchPeopleCommand: CommandDefinition = {
     if (input.company) filters.push(`(key:currentCompany,value:List(${input.company}))`);
     if (input.industry) filters.push(`(key:industry,value:List(${input.industry}))`);
     if (input.school) filters.push(`(key:schools,value:List(${input.school}))`);
-    if (input.title) filters.push(`(key:title,value:List(${encodeURIComponent(input.title)}))`);
-    if (input.first_name) filters.push(`(key:firstName,value:List(${encodeURIComponent(input.first_name)}))`);
-    if (input.last_name) filters.push(`(key:lastName,value:List(${encodeURIComponent(input.last_name)}))`);
+    if (input.title) filters.push(`(key:title,value:List(${sanitizeGroupedTerm(input.title)}))`);
+    if (input.first_name) filters.push(`(key:firstName,value:List(${sanitizeGroupedTerm(input.first_name)}))`);
+    if (input.last_name) filters.push(`(key:lastName,value:List(${sanitizeGroupedTerm(input.last_name)}))`);
     if (input.geo) filters.push(`(key:geoUrn,value:List(${input.geo}))`);
 
     const queryParams = `List(${filters.join(',')})`;
-    const keywords = input.keywords ? encodeURIComponent(input.keywords) : '';
+    const keywords = input.keywords ? sanitizeGroupedTerm(input.keywords) : '';
 
     const variables = `(start:${input.start},origin:GLOBAL_SEARCH_HEADER,query:(keywords:${keywords},flagshipSearchIntent:SEARCH_SRP,queryParameters:${queryParams},includeFiltersInResponse:false))`;
 
@@ -98,7 +99,7 @@ export const searchCompaniesCommand: CommandDefinition = {
   },
 
   handler: async (input, client) => {
-    const keywords = encodeURIComponent(input.keywords);
+    const keywords = sanitizeGroupedTerm(input.keywords);
     const variables = `(start:${input.start},origin:GLOBAL_SEARCH_HEADER,query:(keywords:${keywords},flagshipSearchIntent:SEARCH_SRP,queryParameters:List((key:resultType,value:List(COMPANIES))),includeFiltersInResponse:false))`;
 
     return client.get('/graphql', {
@@ -152,13 +153,13 @@ export const searchJobsCommand: CommandDefinition = {
     if (input.location) selectedFilters.push(`distance:List(25)`);
 
     const filtersStr = selectedFilters.length > 0 ? `,selectedFilters:(${selectedFilters.join(',')})` : '';
-    const locationStr = input.location ? `,locationFallback:${encodeURIComponent(input.location)}` : '';
+    const locationStr = input.location ? `,locationFallback:${sanitizeGroupedTerm(input.location)}` : '';
 
     return client.get('/voyagerJobsDashJobCards', {
       decorationId: 'com.linkedin.voyager.dash.deco.jobs.search.JobSearchCardsCollection-174',
       count: input.limit,
       q: 'jobSearch',
-      query: `(origin:JOB_SEARCH_PAGE_QUERY_EXPANSION,keywords:${encodeURIComponent(input.keywords)}${locationStr}${filtersStr},spellCorrectionEnabled:true)`,
+      query: `(origin:JOB_SEARCH_PAGE_QUERY_EXPANSION,keywords:${sanitizeGroupedTerm(input.keywords)}${locationStr}${filtersStr},spellCorrectionEnabled:true)`,
       start: input.start,
     });
   },

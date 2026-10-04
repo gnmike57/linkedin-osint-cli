@@ -24,4 +24,21 @@ program
 
 registerAllCommands(program);
 
-program.parse();
+// Interactive console: bare `linkedin` on a TTY, or `linkedin menu` from anywhere.
+program
+  .command('menu')
+  .description('Interactive console — command palette, category browser, guided prompts')
+  .action(async () => {
+    const { runInteractiveMenu } = await import('./interactive/launcher.js');
+    await runInteractiveMenu({ version: pkg.version });
+  });
+
+const isBare = process.argv.slice(2).length === 0;
+if (isBare && process.stdout.isTTY && process.stdin.isTTY) {
+  const { runInteractiveMenu } = await import('./interactive/launcher.js');
+  await runInteractiveMenu({ version: pkg.version });
+} else if (isBare) {
+  program.outputHelp();
+} else {
+  await program.parseAsync();
+}

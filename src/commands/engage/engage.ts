@@ -27,9 +27,13 @@ export const engageReactCommand: CommandDefinition = {
   },
 
   handler: async (input, client) => {
+    // Pass the thread URN through the query builder (it URL-encodes) instead of
+    // interpolating into the path — post_urn is operator-supplied and may
+    // contain characters that would corrupt a raw query string.
     return client.post(
-      `/voyagerSocialDashReactions?threadUrn=urn:li:activity:${input.post_urn}`,
+      '/voyagerSocialDashReactions',
       { reactionType: input.type },
+      { threadUrn: `urn:li:activity:${String(input.post_urn).replace(/[^\w:.-]/g, '')}` },
     );
   },
 };

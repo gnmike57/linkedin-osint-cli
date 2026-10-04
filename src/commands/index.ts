@@ -71,7 +71,7 @@ export function registerAllCommands(program: Command): void {
  * request. Lets purely-offline commands (osint classify --title, osint names,
  * osint matrix, ...) run without any cookies configured.
  */
-function createLazyClient(authFlags: {
+export function createLazyClient(authFlags: {
   liAt?: string;
   jsessionid?: string;
   fromChrome?: boolean;
@@ -168,8 +168,18 @@ function registerCommand(parent: Command, cmdDef: CommandDefinition): void {
       const parsed = cmdDef.inputSchema.safeParse(input);
       if (!parsed.success) {
         const issues = (parsed as any).error?.issues ?? [];
+        // Missing-required detection. zod v3 reports code 'invalid_type' with
+        // message 'Required'; zod v4 rewrote messages, so match the shape:
+        // an invalid_type issue whose input was absent (expected something,
+        // the field itself is the one that failed). Path root is the field.
         const missing = issues
-          .filter((i: any) => i.code === 'invalid_type' && String(i.message).includes('Required'))
+          .filter(
+            (i: any) =>
+              i.code === 'invalid_type' &&
+              (String(i.message).includes('Required') ||
+                /expected .* received undefined/i.test(String(i.message)) ||
+                i.input === undefined),
+          )
           .map((i: any) => '--' + String(i.path?.[0] ?? '').replace(/_/g, '-'));
         if (missing.length > 0) {
           throw new Error(`Missing required option(s): ${missing.join(', ')}`);

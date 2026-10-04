@@ -110,6 +110,15 @@ export LINKEDIN_HTTP=curl-impersonate
 
 ## Quick Start
 
+### Interactive console
+
+Run `linkedin` with no arguments (or `linkedin menu` from anywhere) to open the
+interactive console: a searchable command palette over every CLI command, a
+category browser, guided prompts for each argument/option, and the equivalent
+scriptable command line printed before each run so you can graduate to
+scripts. Session actions (`login`, `status --verify`, `logout`) are built in.
+On a pipe or CI (no TTY), bare `linkedin` prints plain help instead.
+
 ### Option A — Read cookies from Chrome (local macOS/Linux only)
 
 If you are already logged into LinkedIn in Chrome **on this machine**, the CLI can decrypt cookies from the local profile. This sends the full cookie jar (not just `li_at` + `JSESSIONID`), which matches a real browser more closely. Local-only — do not point this at a remote Chrome profile or run it from a cloud agent.

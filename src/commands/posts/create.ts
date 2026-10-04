@@ -124,7 +124,13 @@ export const postsDeleteCommand: CommandDefinition = {
   },
 };
 
-async function uploadImage(client: LinkedInClient, filePath: string): Promise<string> {
+/** Bare filename for upload metadata — handles POSIX and Windows separators. */
+export function imageFilename(filePath: string): string {
+  return filePath.split(/[\\/]/).pop() ?? 'image.jpg';
+}
+
+/** Upload a local image, returning its LinkedIn media URN. */
+export async function uploadImage(client: LinkedInClient, filePath: string): Promise<string> {
   // Validate file exists before uploading
   try {
     await access(filePath, constants.R_OK);
@@ -134,7 +140,7 @@ async function uploadImage(client: LinkedInClient, filePath: string): Promise<st
 
   const fileBuffer = await readFile(filePath);
   const fileSize = fileBuffer.byteLength;
-  const filename = filePath.split('/').pop() ?? 'image.jpg';
+  const filename = imageFilename(filePath);
 
   // Step 1: Get upload URL
   const uploadMeta = await client.post<any>(
@@ -152,6 +158,11 @@ async function uploadImage(client: LinkedInClient, filePath: string): Promise<st
   if (!uploadUrl || !mediaUrn) {
     throw new Error('Failed to get image upload URL from LinkedIn');
   }
+  // Only ever PUT user files to TLS endpoints — a non-https URL here would
+  // mean LinkedIn handed us a redirect to something unexpected.
+  if (!String(uploadUrl).toLowerCase().startsWith('https://')) {
+    throw new Error(`Refusing non-https image upload URL: ${String(uploadUrl).slice(0, 30)}…`);
+  }
 
   // Step 2: Upload the binary
   const uploadHeaders: Record<string, string> = {
@@ -163,6 +174,7 @@ async function uploadImage(client: LinkedInClient, filePath: string): Promise<st
     method: 'PUT',
     headers: uploadHeaders,
     body: fileBuffer,
+    signal: AbortSignal.timeout(60_000),
   });
 
   if (!uploadResponse.ok) {

@@ -17,7 +17,7 @@ export const jobsViewCommand: CommandDefinition = {
   },
 
   handler: async (input, client) => {
-    return client.get(`/jobs/jobPostings/${input.job_id}`, {
+    return client.get(`/jobs/jobPostings/${encodeURIComponent(input.job_id)}`, {
       decorationId: 'com.linkedin.voyager.deco.jobs.web.shared.WebLightJobPosting-23',
     });
   },
