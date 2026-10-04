@@ -9,7 +9,7 @@ import {
   GROUP_META,
 } from '../src/interactive/catalog.js';
 import { bannerLines } from '../src/interactive/banner.js';
-import { createFallbackPrompts, parseSelection } from '../src/interactive/readline-prompts.js';
+import { createFallbackPrompts, parseSelection, resolvePromptsPreference } from '../src/interactive/readline-prompts.js';
 
 describe('interactive catalog', () => {
   const catalog = buildCatalog(allCommands);
@@ -132,6 +132,17 @@ describe('built-in fallback console (readline)', () => {
     await expect(prompts.input({ message: 'after EOF' })).rejects.toMatchObject({
       name: 'ExitPromptError',
     });
+  });
+
+  it('resolves the LINKEDIN_PROMPTS preference', () => {
+    const env = (v?: string) => ({ ...(v === undefined ? {} : { LINKEDIN_PROMPTS: v }) }) as NodeJS.ProcessEnv;
+    expect(resolvePromptsPreference(env())).toBe('auto');
+    expect(resolvePromptsPreference(env(''))).toBe('auto');
+    expect(resolvePromptsPreference(env('nonsense'))).toBe('auto');
+    expect(resolvePromptsPreference(env('fallback'))).toBe('fallback');
+    expect(resolvePromptsPreference(env('BUILTIN'))).toBe('fallback');
+    expect(resolvePromptsPreference(env('readline'))).toBe('fallback');
+    expect(resolvePromptsPreference(env('inquirer'))).toBe('inquirer');
   });
 
   it('retries invalid selections then gives up cleanly', async () => {

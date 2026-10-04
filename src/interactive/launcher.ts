@@ -17,6 +17,7 @@ import { output, outputError } from '../core/output.js';
 import type { CommandDefinition } from '../core/types.js';
 import { renderBanner } from './banner.js';
 import { c, CHECK, CROSS, ARROW, DOT } from './colors.js';
+import { resolvePromptsPreference } from './readline-prompts.js';
 import {
   buildCatalog,
   flagTakesValue,
@@ -92,16 +93,41 @@ function isBooleanField(cmd: CommandDefinition, field: string): boolean {
  * Prefer @inquirer/prompts; fall back to the built-in readline console when
  * the package is missing or incomplete (restricted registries, broken
  * installs). The console must always be launchable.
+ *
+ * LINKEDIN_PROMPTS=fallback forces the built-in console (used by the smoke
+ * tests so scripted sessions are deterministic); LINKEDIN_PROMPTS=inquirer
+ * requires the real package and fails loudly instead of degrading silently.
  */
 async function loadPrompts(): Promise<Prompts> {
-  try {
-    const mod = (await import('@inquirer/prompts')) as unknown as Partial<Prompts>;
-    if (typeof mod.input === 'function' && typeof mod.confirm === 'function' && typeof mod.select === 'function') {
-      return mod as Prompts;
+  const preference = resolvePromptsPreference();
+  let inquirerError: Error | undefined;
+
+  if (preference !== 'fallback') {
+    try {
+      const mod = (await import('@inquirer/prompts')) as unknown as Partial<Prompts>;
+      if (
+        typeof mod.input === 'function' &&
+        typeof mod.confirm === 'function' &&
+        typeof mod.select === 'function'
+      ) {
+        return mod as Prompts;
+      }
+      inquirerError = new Error(
+        '@inquirer/prompts is installed but incomplete (missing input/confirm/select).',
+      );
+    } catch (err) {
+      inquirerError = err instanceof Error ? err : new Error(String(err));
     }
-  } catch {
-    /* fall through to built-in */
   }
+
+  if (preference === 'inquirer') {
+    throw new Error(
+      `LINKEDIN_PROMPTS=inquirer was set but @inquirer/prompts is unavailable: ${
+        inquirerError?.message ?? 'unknown error'
+      }`,
+    );
+  }
+
   console.log(
     c.dim('  note: @inquirer/prompts unavailable — using the built-in console fallback\n'),
   );

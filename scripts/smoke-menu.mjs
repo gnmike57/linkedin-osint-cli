@@ -36,7 +36,12 @@ const BROWSE_SESSION = ['', '1', '11', '5', 'Senior Cyber Security Manager', '',
 
 function runScenario(lines) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [entry, 'menu'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, [entry, 'menu'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      // Force the built-in console so scripted sessions are deterministic even
+      // when @inquirer/prompts is installed (real prompts need a TTY).
+      env: { ...process.env, LINKEDIN_PROMPTS: 'fallback' },
+    });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d) => {

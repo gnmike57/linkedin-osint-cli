@@ -40,6 +40,26 @@ export function parseSelection(answer: string, count: number): number | null {
   return n - 1;
 }
 
+/**
+ * Which prompt implementation to use.
+ *
+ * - `auto` (default): prefer @inquirer/prompts, fall back to the built-in console.
+ * - `inquirer`: require @inquirer/prompts — fail loudly if it is missing, so a
+ *   broken install is never hidden behind a silent fallback.
+ * - `fallback`: always use the built-in console. Also what the smoke tests set,
+ *   so scripted sessions behave identically on every machine.
+ *
+ * Controlled by the LINKEDIN_PROMPTS env var.
+ */
+export type PromptsPreference = 'auto' | 'inquirer' | 'fallback';
+
+export function resolvePromptsPreference(env: NodeJS.ProcessEnv = process.env): PromptsPreference {
+  const value = (env.LINKEDIN_PROMPTS ?? '').trim().toLowerCase();
+  if (value === 'fallback' || value === 'builtin' || value === 'readline') return 'fallback';
+  if (value === 'inquirer' || value === 'prompts') return 'inquirer';
+  return 'auto';
+}
+
 export function exitPromptError(): Error {
   const err = new Error('cancelled');
   err.name = 'ExitPromptError';

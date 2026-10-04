@@ -8,6 +8,7 @@
   },
   "files": [
     "dist/",
+    "assets/",
     "README.md",
     "AGENTS.md",
     "LICENSE"
@@ -28,11 +29,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bcharleson/linkedincli.git"
+    "url": "git+https://github.com/gnmike57/linkedin-osint-cli.git"
   },
-  "homepage": "https://github.com/bcharleson/linkedincli#readme",
+  "homepage": "https://github.com/gnmike57/linkedin-osint-cli#readme",
   "bugs": {
-    "url": "https://github.com/bcharleson/linkedincli/issues"
+    "url": "https://github.com/gnmike57/linkedin-osint-cli/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",

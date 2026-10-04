@@ -1,8 +1,11 @@
-# linkedincli
+# linkedin-osint-cli
+
+[![CI](https://github.com/gnmike57/linkedin-osint-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/gnmike57/linkedin-osint-cli/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 Full LinkedIn platform management from your terminal. 43 platform commands (profiles, posts, messaging, connections, search, feed, engagement) **plus an OSINT suite**: company discovery, employee scraping, username generation, role classification, org charts, and email deanonymization — powered by cookie session auth.
 
-Works as a **CLI** and an **MCP server** (for Claude Code, Cursor, Windsurf, and other AI agents). Every command — platform and OSINT — is exposed as an MCP tool automatically.
+Works as a **CLI** and an **MCP server** (for Claude Code, Cursor, Windsurf, and other AI agents). All 56 tools (43 platform + 13 OSINT) are exposed over MCP automatically, plus an interactive console for humans.
 
 ## OSINT Suite
 
@@ -48,16 +51,23 @@ The interactive org chart viewer ships at `assets/org_chart_viewer.html` (tree +
 
 ## Install
 
+From source (this repo is not published to npm):
+
 ```bash
-# Install globally
-npm install -g @bcharleson/linkedincli
+git clone https://github.com/gnmike57/linkedin-osint-cli.git
+cd linkedin-osint-cli
+npm ci
+npm run build
+npm link          # puts the `linkedin` command on your PATH
 
-# This installs the `linkedin` command:
 linkedin --help
-
-# Or run without installing
-npx @bcharleson/linkedincli --help
 ```
+
+`@inquirer/prompts` is an **optional** dependency: the interactive console uses
+it when present and otherwise falls back to a built-in `node:readline`
+implementation, so a restricted registry or a partial install never blocks you.
+Force either path with `LINKEDIN_PROMPTS=inquirer` (require it, fail loudly) or
+`LINKEDIN_PROMPTS=fallback` (always use the built-in console).
 
 > **Note:** The npm package is `@bcharleson/linkedincli` but the CLI command is just **`linkedin`**.
 
@@ -343,7 +353,7 @@ Auth resolution order: `--from-chrome` / `LINKEDIN_FROM_CHROME` → `--li-at`/`-
 
 ## MCP Server (AI Agents)
 
-All 43 commands are available as MCP tools. The MCP process that talks to LinkedIn must run on the **local harness**. Cloud agents and Grok Bot may install the CLI binary or call this local MCP — they must not hold cookies or originate Voyager calls.
+All 56 tools (43 platform + 13 OSINT) are available as MCP tools. The MCP process that talks to LinkedIn must run on the **local harness**. Cloud agents and Grok Bot may install the CLI binary or call this local MCP — they must not hold cookies or originate Voyager calls.
 
 ### Local Claude Code / Cursor / Windsurf
 
@@ -365,14 +375,14 @@ Add to the MCP config **on the local machine**:
 }
 ```
 
-Or if using `npx`:
+Or point straight at the standalone MCP entry (`dist/mcp.js`, no CLI wrapper):
 
 ```json
 {
   "mcpServers": {
     "linkedin": {
-      "command": "npx",
-      "args": ["-y", "@bcharleson/linkedincli", "mcp"]
+      "command": "node",
+      "args": ["/absolute/path/to/linkedin-osint-cli/dist/mcp.js"]
     }
   }
 }
@@ -399,6 +409,26 @@ For posts **by a specific member**, use `profile posts` (`identity/profileUpdate
 ```bash
 linkedin profile posts <urn-id> --limit 20
 ```
+
+## Development
+
+```bash
+npm run typecheck      # tsc --noEmit
+npm test               # vitest
+npm run build          # tsup -> dist/ (index.js + mcp.js)
+npm run smoke:menu     # end-to-end interactive console (run build first)
+npm run smoke:mcp      # MCP handshake + tools/list (run build first)
+```
+
+The smoke scripts drive the real `dist/` artifacts, not mocks: `smoke:menu`
+runs two scripted console sessions (search path and category-browse path) and
+asserts the selected command actually executes, that no prompt hangs on piped
+input, and that the process exits cleanly; `smoke:mcp` boots the server,
+performs the initialize handshake and verifies every tool is exposed with a
+schema. Both force `LINKEDIN_PROMPTS=fallback` so scripted input behaves the
+same on every machine. CI runs typecheck + tests + build + both smoke suites
+on Node 18, 20 and 22 (plus Windows on Node 20).
+
 
 ## Disclaimer
 
