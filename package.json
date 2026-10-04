@@ -10,6 +10,7 @@
     "dist/",
     "assets/",
     "README.md",
+    "CHANGELOG.md",
     "AGENTS.md",
     "LICENSE"
   ],
