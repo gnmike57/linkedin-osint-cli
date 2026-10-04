@@ -5,6 +5,7 @@ import { createClient } from '../core/client.js';
 import { output, outputError } from '../core/output.js';
 import { registerLoginCommand, registerLogoutCommand, registerStatusCommand } from './auth/login.js';
 import { registerMcpCommand } from './mcp/index.js';
+import { osintCommands } from './osint/index.js';
 
 // Import all command groups
 import { profileCommands } from './profile/view.js';
@@ -29,6 +30,7 @@ export const allCommands: CommandDefinition[] = [
   ...companiesCommands,
   ...jobsCommands,
   ...analyticsCommands,
+  ...osintCommands,
 ];
 
 export function registerAllCommands(program: Command): void {

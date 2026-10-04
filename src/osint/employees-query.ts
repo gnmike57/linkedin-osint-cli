@@ -73,6 +73,45 @@ export interface ParsedEmployeesResult {
   jsonError: boolean;
 }
 
+export interface ParsedEmployeesPayload {
+  employees: EmployeeEntry[];
+  /** paging.total from the response — 0 means end of results. */
+  total: number;
+}
+
+/**
+ * Parse an already-deserialized people-search payload (what `client.get`
+ * returns after JSON.parse). Shared by the text parser below and the
+ * command layer.
+ */
+export function parseEmployeesPayload(data: unknown): ParsedEmployeesPayload {
+  const employees: EmployeeEntry[] = [];
+  const clusters = (data as any)?.data?.searchDashClustersByAll ?? {};
+  const total = clusters?.paging?.total ?? 0;
+  const elements = clusters?.elements ?? [];
+
+  for (const element of elements) {
+    for (const itemBody of element?.items ?? []) {
+      const entity = itemBody?.item?.entityResult;
+      if (!entity) continue;
+
+      const fullName = String(entity?.title?.text ?? '').trim();
+
+      // Skip placeholder profiles with no real name
+      if (fullName.toLowerCase() === 'linkedin member') continue;
+
+      const cleanedName = fullName.startsWith('Dr ') ? fullName.slice(3) : fullName;
+
+      // Some users are missing a primary subtitle
+      const occupation = String(entity?.primarySubtitle?.text ?? '');
+
+      if (cleanedName) employees.push({ full_name: cleanedName, occupation });
+    }
+  }
+
+  return { employees, total: Number(total) || 0 };
+}
+
 /**
  * Parse a people-search response body into employee entries.
  * Filters "LinkedIn Member" placeholders and strips "Dr " prefixes
@@ -98,29 +137,9 @@ export function parseEmployeesResponse(text: string): ParsedEmployeesResult {
     return result;
   }
 
-  const clusters = (data as any)?.data?.searchDashClustersByAll ?? {};
-  result.total = clusters?.paging?.total ?? 0;
-  const elements = clusters?.elements ?? [];
-
-  for (const element of elements) {
-    for (const itemBody of element?.items ?? []) {
-      const entity = itemBody?.item?.entityResult;
-      if (!entity) continue;
-
-      const fullName = String(entity?.title?.text ?? '').trim();
-
-      // Skip placeholder profiles with no real name
-      if (fullName.toLowerCase() === 'linkedin member') continue;
-
-      const cleanedName = fullName.startsWith('Dr ') ? fullName.slice(3) : fullName;
-
-      // Some users are missing a primary subtitle
-      const occupation = String(entity?.primarySubtitle?.text ?? '');
-
-      if (cleanedName) result.employees.push({ full_name: cleanedName, occupation });
-    }
-  }
-
+  const payload = parseEmployeesPayload(data);
+  result.employees = payload.employees;
+  result.total = payload.total;
   return result;
 }
 
