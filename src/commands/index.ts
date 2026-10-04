@@ -66,6 +66,38 @@ export function registerAllCommands(program: Command): void {
   }
 }
 
+/**
+ * A LinkedInClient whose auth is resolved lazily — on the first actual HTTP
+ * request. Lets purely-offline commands (osint classify --title, osint names,
+ * osint matrix, ...) run without any cookies configured.
+ */
+function createLazyClient(authFlags: {
+  liAt?: string;
+  jsessionid?: string;
+  fromChrome?: boolean;
+  chromeProfile?: string;
+}): LinkedInClient {
+  let clientPromise: Promise<LinkedInClient> | null = null;
+  const getClient = async (): Promise<LinkedInClient> => {
+    if (!clientPromise) {
+      clientPromise = (async () => createClient(await resolveAuth(authFlags)))();
+    }
+    return clientPromise;
+  };
+
+  return {
+    request: async (options) => (await getClient()).request(options),
+    get: async <T>(path: string, query?: Record<string, any>) =>
+      (await getClient()).get<T>(path, query),
+    post: async <T>(path: string, body?: unknown, query?: Record<string, any>) =>
+      (await getClient()).post<T>(path, body, query),
+    patch: async <T>(path: string, body?: unknown) => (await getClient()).patch<T>(path, body),
+    put: async <T>(path: string, body?: unknown) => (await getClient()).put<T>(path, body),
+    delete: async <T>(path: string, query?: Record<string, any>) =>
+      (await getClient()).delete<T>(path, query),
+  };
+}
+
 function registerCommand(parent: Command, cmdDef: CommandDefinition): void {
   const cmd = parent
     .command(cmdDef.subcommand)
@@ -100,14 +132,14 @@ function registerCommand(parent: Command, cmdDef: CommandDefinition): void {
         globalOpts.output = 'pretty';
       }
 
-      // Resolve auth and create client
-      const auth = await resolveAuth({
+      // Resolve auth and create client (lazy — auth errors surface on the
+      // first real request, so offline commands run without cookies)
+      const client = createLazyClient({
         liAt: globalOpts.liAt,
         jsessionid: globalOpts.jsessionid,
         fromChrome: globalOpts.fromChrome,
         chromeProfile: globalOpts.chromeProfile,
       });
-      const client = createClient(auth);
 
       // Build input from positional args + options
       const input: Record<string, any> = {};
