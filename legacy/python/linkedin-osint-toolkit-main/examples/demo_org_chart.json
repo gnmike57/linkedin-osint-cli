@@ -1,0 +1,239 @@
+{
+  "generated_at": "2026-02-14T12:00:00",
+  "company_name": "Nexova Global Technologies",
+  "total_people": 44,
+  "total_with_images": 45,
+  "total_divisions": 6,
+  "divisions": [
+    {
+      "id": "software_development",
+      "name": "Engineering",
+      "color": "#9b59b6",
+      "total_people": 12,
+      "levels": [
+        {
+          "level": 90,
+          "name": "VP",
+          "people": [
+            {"name": "Marcus Chen", "title": "VP of Engineering", "role_level": "VP", "role_weight": 90, "division_name": "Engineering", "division_color": "#9b59b6", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=marcus.chen"}
+          ]
+        },
+        {
+          "level": 80,
+          "name": "Director",
+          "people": [
+            {"name": "Elena Vasquez", "title": "Director of Backend Engineering", "role_level": "Director", "role_weight": 80, "division_name": "Engineering", "division_color": "#9b59b6", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=elena.vasquez"},
+            {"name": "James Park", "title": "Director of Frontend Engineering", "role_level": "Director", "role_weight": 80, "division_name": "Engineering", "division_color": "#9b59b6", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=james.park"}
+          ]
+        },
+        {
+          "level": 60,
+          "name": "Manager",
+          "people": [
+            {"name": "Priya Sharma", "title": "Engineering Manager", "role_level": "Manager", "role_weight": 60, "division_name": "Engineering", "division_color": "#9b59b6", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=priya.sharma"},
+            {"name": "Daniel Okafor", "title": "Platform Team Lead", "role_level": "Manager", "role_weight": 60, "division_name": "Engineering", "division_color": "#9b59b6", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=daniel.okafor"}
+          ]
+        },
+        {
+          "level": 45,
+          "name": "Senior",
+          "people": [
+            {"name": "Sophie Müller", "title": "Senior Backend Developer", "role_level": "Senior", "role_weight": 45, "division_name": "Engineering", "division_color": "#9b59b6", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=sophie.muller"},
+            {"name": "Tomás Rivera", "title": "Senior Frontend Developer", "role_level": "Senior", "role_weight": 45, "division_name": "Engineering", "division_color": "#9b59b6", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=tomas.rivera"},
+            {"name": "Aisha Patel", "title": "Senior DevOps Engineer", "role_level": "Senior", "role_weight": 45, "division_name": "Engineering", "division_color": "#9b59b6", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=aisha.patel"}
+          ]
+        },
+        {
+          "level": 5,
+          "name": "Staff",
+          "people": [
+            {"name": "Lucas Kim", "title": "Software Developer", "role_level": "Staff", "role_weight": 5, "division_name": "Engineering", "division_color": "#9b59b6", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=lucas.kim"},
+            {"name": "Mia Johnson", "title": "QA Engineer", "role_level": "Staff", "role_weight": 5, "division_name": "Engineering", "division_color": "#9b59b6", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=mia.johnson"},
+            {"name": "Ravi Gupta", "title": "Junior Developer", "role_level": "Staff", "role_weight": 5, "division_name": "Engineering", "division_color": "#9b59b6", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=ravi.gupta"},
+            {"name": "Emma Wilson", "title": "Site Reliability Engineer", "role_level": "Staff", "role_weight": 5, "division_name": "Engineering", "division_color": "#9b59b6", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=emma.wilson"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "product",
+      "name": "Product",
+      "color": "#ff5722",
+      "total_people": 8,
+      "levels": [
+        {
+          "level": 80,
+          "name": "Director",
+          "people": [
+            {"name": "Olivia Brooks", "title": "Director of Product", "role_level": "Director", "role_weight": 80, "division_name": "Product", "division_color": "#ff5722", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=olivia.brooks"}
+          ]
+        },
+        {
+          "level": 60,
+          "name": "Manager",
+          "people": [
+            {"name": "Nathan Wright", "title": "Senior Product Manager", "role_level": "Manager", "role_weight": 60, "division_name": "Product", "division_color": "#ff5722", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=nathan.wright"},
+            {"name": "Layla Hassan", "title": "Product Manager", "role_level": "Manager", "role_weight": 60, "division_name": "Product", "division_color": "#ff5722", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=layla.hassan"}
+          ]
+        },
+        {
+          "level": 45,
+          "name": "Senior",
+          "people": [
+            {"name": "Kevin Tanaka", "title": "Senior UX Designer", "role_level": "Senior", "role_weight": 45, "division_name": "Product", "division_color": "#ff5722", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=kevin.tanaka"},
+            {"name": "Clara Johansson", "title": "Senior Product Analyst", "role_level": "Senior", "role_weight": 45, "division_name": "Product", "division_color": "#ff5722", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=clara.johansson"}
+          ]
+        },
+        {
+          "level": 5,
+          "name": "Staff",
+          "people": [
+            {"name": "Alex Petrov", "title": "UX Designer", "role_level": "Staff", "role_weight": 5, "division_name": "Product", "division_color": "#ff5722", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=alex.petrov"},
+            {"name": "Diana Reyes", "title": "Product Coordinator", "role_level": "Staff", "role_weight": 5, "division_name": "Product", "division_color": "#ff5722", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=diana.reyes"},
+            {"name": "Sam Bennett", "title": "Technical Writer", "role_level": "Staff", "role_weight": 5, "division_name": "Product", "division_color": "#ff5722", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=sam.bennett"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "data_and_ai",
+      "name": "Data Science",
+      "color": "#1abc9c",
+      "total_people": 7,
+      "levels": [
+        {
+          "level": 80,
+          "name": "Director",
+          "people": [
+            {"name": "Wei Zhang", "title": "Head of Data Science", "role_level": "Director", "role_weight": 80, "division_name": "Data Science", "division_color": "#1abc9c", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=wei.zhang"}
+          ]
+        },
+        {
+          "level": 60,
+          "name": "Manager",
+          "people": [
+            {"name": "Fatima Al-Rashid", "title": "Machine Learning Manager", "role_level": "Manager", "role_weight": 60, "division_name": "Data Science", "division_color": "#1abc9c", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=fatima.alrashid"}
+          ]
+        },
+        {
+          "level": 45,
+          "name": "Senior",
+          "people": [
+            {"name": "Andrei Volkov", "title": "Senior Data Scientist", "role_level": "Senior", "role_weight": 45, "division_name": "Data Science", "division_color": "#1abc9c", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=andrei.volkov"},
+            {"name": "Grace Nwosu", "title": "Senior ML Engineer", "role_level": "Senior", "role_weight": 45, "division_name": "Data Science", "division_color": "#1abc9c", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=grace.nwosu"}
+          ]
+        },
+        {
+          "level": 5,
+          "name": "Staff",
+          "people": [
+            {"name": "Leo Martinez", "title": "Data Analyst", "role_level": "Staff", "role_weight": 5, "division_name": "Data Science", "division_color": "#1abc9c", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=leo.martinez"},
+            {"name": "Yuki Sato", "title": "Data Engineer", "role_level": "Staff", "role_weight": 5, "division_name": "Data Science", "division_color": "#1abc9c", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=yuki.sato"},
+            {"name": "Hannah Berg", "title": "Junior Data Scientist", "role_level": "Staff", "role_weight": 5, "division_name": "Data Science", "division_color": "#1abc9c", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=hannah.berg"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "marketing",
+      "name": "Marketing",
+      "color": "#8bc34a",
+      "total_people": 7,
+      "levels": [
+        {
+          "level": 90,
+          "name": "VP",
+          "people": [
+            {"name": "Rachel Adams", "title": "VP of Marketing", "role_level": "VP", "role_weight": 90, "division_name": "Marketing", "division_color": "#8bc34a", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=rachel.adams"}
+          ]
+        },
+        {
+          "level": 60,
+          "name": "Manager",
+          "people": [
+            {"name": "Carlos Mendoza", "title": "Growth Marketing Manager", "role_level": "Manager", "role_weight": 60, "division_name": "Marketing", "division_color": "#8bc34a", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=carlos.mendoza"},
+            {"name": "Nina Kowalski", "title": "Content Marketing Manager", "role_level": "Manager", "role_weight": 60, "division_name": "Marketing", "division_color": "#8bc34a", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=nina.kowalski"}
+          ]
+        },
+        {
+          "level": 45,
+          "name": "Senior",
+          "people": [
+            {"name": "Tariq Bello", "title": "Senior Brand Designer", "role_level": "Senior", "role_weight": 45, "division_name": "Marketing", "division_color": "#8bc34a", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=tariq.bello"}
+          ]
+        },
+        {
+          "level": 5,
+          "name": "Staff",
+          "people": [
+            {"name": "Jessica Lam", "title": "Marketing Coordinator", "role_level": "Staff", "role_weight": 5, "division_name": "Marketing", "division_color": "#8bc34a", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=jessica.lam"},
+            {"name": "Ryan O'Brien", "title": "Social Media Specialist", "role_level": "Staff", "role_weight": 5, "division_name": "Marketing", "division_color": "#8bc34a", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=ryan.obrien"},
+            {"name": "Lena Fischer", "title": "Content Writer", "role_level": "Staff", "role_weight": 5, "division_name": "Marketing", "division_color": "#8bc34a", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=lena.fischer"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "finance",
+      "name": "Finance",
+      "color": "#f39c12",
+      "total_people": 5,
+      "levels": [
+        {
+          "level": 100,
+          "name": "Executive",
+          "people": [
+            {"name": "Robert Chang", "title": "CFO", "role_level": "Executive", "role_weight": 100, "division_name": "Finance", "division_color": "#f39c12", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=robert.chang"}
+          ]
+        },
+        {
+          "level": 60,
+          "name": "Manager",
+          "people": [
+            {"name": "Amara Diallo", "title": "Finance Manager", "role_level": "Manager", "role_weight": 60, "division_name": "Finance", "division_color": "#f39c12", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=amara.diallo"}
+          ]
+        },
+        {
+          "level": 5,
+          "name": "Staff",
+          "people": [
+            {"name": "Michael Torres", "title": "Financial Analyst", "role_level": "Staff", "role_weight": 5, "division_name": "Finance", "division_color": "#f39c12", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=michael.torres"},
+            {"name": "Julia Novak", "title": "Accountant", "role_level": "Staff", "role_weight": 5, "division_name": "Finance", "division_color": "#f39c12", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=julia.novak"},
+            {"name": "David Osei", "title": "Payroll Specialist", "role_level": "Staff", "role_weight": 5, "division_name": "Finance", "division_color": "#f39c12", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=david.osei"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hr",
+      "name": "People Ops",
+      "color": "#e91e63",
+      "total_people": 5,
+      "levels": [
+        {
+          "level": 100,
+          "name": "Executive",
+          "people": [
+            {"name": "Sarah Mitchell", "title": "CEO", "role_level": "Executive", "role_weight": 100, "division_name": "People Ops", "division_color": "#e91e63", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=sarah.mitchell"}
+          ]
+        },
+        {
+          "level": 80,
+          "name": "Director",
+          "people": [
+            {"name": "Ingrid Larsen", "title": "Head of People", "role_level": "Director", "role_weight": 80, "division_name": "People Ops", "division_color": "#e91e63", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=ingrid.larsen"}
+          ]
+        },
+        {
+          "level": 5,
+          "name": "Staff",
+          "people": [
+            {"name": "Chris Taylor", "title": "Recruiter", "role_level": "Staff", "role_weight": 5, "division_name": "People Ops", "division_color": "#e91e63", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=chris.taylor"},
+            {"name": "Ana Sousa", "title": "HR Coordinator", "role_level": "Staff", "role_weight": 5, "division_name": "People Ops", "division_color": "#e91e63", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=ana.sousa"},
+            {"name": "Omar Hadid", "title": "Office Manager", "role_level": "Staff", "role_weight": 5, "division_name": "People Ops", "division_color": "#e91e63", "profile_url": "", "profile_image_url": "https://i.pravatar.cc/150?u=omar.hadid"}
+          ]
+        }
+      ]
+    }
+  ]
+}

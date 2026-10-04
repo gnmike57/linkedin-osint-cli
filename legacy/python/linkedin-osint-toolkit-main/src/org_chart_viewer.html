@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Org Chart Viewer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #12162b;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* ---- Header ---- */
+        .header {
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 1.3em;
+            margin-bottom: 2px;
+            background: linear-gradient(90deg, #00d4ff, #7c3aed, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-sub { font-size: 0.7em; color: #666; }
+
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+
+        .stat {
+            text-align: center;
+            background: rgba(255,255,255,0.05);
+            padding: 2px 12px;
+            border-radius: 6px;
+        }
+
+        .stat-num { font-size: 1.1em; font-weight: bold; color: #00d4ff; }
+        .stat-label { font-size: 0.65em; color: #888; }
+
+        /* ---- Controls bar ---- */
+        .controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 15px 0;
+            margin-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            flex-wrap: wrap;
+        }
+
+        .controls button, .controls label {
+            padding: 5px 14px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .controls button:hover, .controls label:hover { background: rgba(255,255,255,0.2); }
+        .controls label.primary {
+            background: rgba(0,212,255,0.2);
+            border-color: rgba(0,212,255,0.5);
+        }
+        .controls label.primary:hover { background: rgba(0,212,255,0.35); }
+
+        .controls input[type="file"] { display: none; }
+
+        .controls input[type="text"] {
+            padding: 5px 12px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+            font-size: 12px;
+            width: 180px;
+        }
+        .controls input[type="text"]::placeholder { color: #555; }
+
+        /* View toggle buttons */
+        .controls .view-toggle { border: 1px solid rgba(124,58,237,0.4); }
+        .controls .view-toggle.active {
+            background: rgba(124,58,237,0.3);
+            border-color: rgba(124,58,237,0.8);
+            color: #c4b5fd;
+        }
+        .controls .sep {
+            width: 1px; height: 20px;
+            background: rgba(255,255,255,0.1);
+            margin: 0 2px;
+        }
+
+        .hidden-btn { display: none !important; }
+
+        /* ---- Chart area (Tree) ---- */
+        #chart {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+        }
+
+        /* ---- Matrix area ---- */
+        #matrixWrap {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            overflow: auto;
+            padding-top: 170px;
+            display: none;
+        }
+
+        #matrixWrap table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        #matrixWrap .col-header {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            padding: 8px 6px;
+            font-size: 0.72em;
+            font-weight: 600;
+            color: #fff;
+            text-align: center;
+            border-bottom: 2px solid rgba(0,0,0,0.3);
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        #matrixWrap .col-count { font-weight: 400; font-size: 0.85em; opacity: 0.7; }
+
+        #matrixWrap .corner {
+            position: sticky;
+            top: 0; left: 0;
+            z-index: 60;
+            background: #12162b;
+            width: 110px; min-width: 110px; max-width: 110px;
+            border-bottom: 2px solid rgba(0,0,0,0.3);
+            border-right: 2px solid rgba(0,0,0,0.3);
+        }
+
+        #matrixWrap .row-header {
+            position: sticky;
+            left: 0;
+            z-index: 40;
+            padding: 8px 8px;
+            font-size: 0.72em;
+            font-weight: 600;
+            color: #fff;
+            white-space: nowrap;
+            width: 110px; min-width: 110px; max-width: 110px;
+            border-right: 2px solid rgba(0,0,0,0.3);
+            vertical-align: middle;
+            text-align: center;
+        }
+
+        #matrixWrap .m-cell {
+            padding: 6px;
+            vertical-align: middle;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            border-right: 1px solid rgba(255,255,255,0.03);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        #matrixWrap .m-cell:hover { background: rgba(255,255,255,0.05); }
+        #matrixWrap .m-cell.empty { background: rgba(0,0,0,0.08); cursor: default; }
+
+        .count-zero { color: #333; font-size: 0.8em; }
+
+        .m-count-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .m-count-badge:hover { transform: scale(1.15); box-shadow: 0 0 10px rgba(0,212,255,0.4); }
+
+        .m-people {
+            display: none;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 2px;
+            margin-top: 4px;
+        }
+        .m-people.show { display: flex; }
+
+        .m-avatar {
+            display: inline-block;
+            width: 38px; height: 38px;
+            border-radius: 50%;
+            border: 3px solid #555;
+            overflow: hidden;
+            vertical-align: middle;
+            position: relative;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .m-avatar:hover { transform: scale(1.3); box-shadow: 0 0 12px rgba(0,212,255,0.5); z-index: 10; }
+        .m-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+        .m-initials {
+            width: 100%; height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: 0.5px;
+        }
+
+        .m-avatar.dimmed { opacity: 0.12; transform: scale(0.85); }
+
+        #matrixWrap a { text-decoration: none; color: inherit; }
+
+        #matrixWrap tbody tr:hover .m-cell:not(.empty) { background: rgba(255,255,255,0.04); }
+
+        /* ---- Landing / drop zone ---- */
+        .landing {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        .landing.hidden { display: none; }
+
+        .drop-zone {
+            width: 420px; max-width: 90vw;
+            padding: 60px 40px;
+            border: 2px dashed rgba(0,212,255,0.3);
+            border-radius: 16px;
+            background: rgba(0,212,255,0.04);
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: rgba(0,212,255,0.7);
+            background: rgba(0,212,255,0.1);
+        }
+        .drop-zone h2 { font-size: 1.4em; color: #00d4ff; margin-bottom: 8px; }
+        .drop-zone p { font-size: 0.85em; color: #666; margin-bottom: 16px; }
+        .drop-zone .btn-load {
+            display: inline-block; padding: 10px 28px;
+            background: rgba(0,212,255,0.2); border: 1px solid rgba(0,212,255,0.5);
+            border-radius: 8px; color: #00d4ff; font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: background 0.15s;
+        }
+        .drop-zone .btn-load:hover { background: rgba(0,212,255,0.35); }
+        .drop-zone .hint { font-size: 0.7em; color: #444; margin-top: 14px; }
+
+        /* ---- D3 tree styles ---- */
+        .link { fill: none; stroke: rgba(255,255,255,0.12); stroke-width: 1.5px; }
+        .node-label { fill: #ccc; font-size: 9px; text-anchor: middle; pointer-events: none; text-shadow: 0 0 4px #000, 0 0 8px #000; }
+        .collapse-indicator { fill: #00d4ff; font-size: 9px; text-anchor: middle; pointer-events: none; }
+        .dept-node-label { fill: #fff; font-size: 10px; text-anchor: middle; font-weight: 600; pointer-events: none; text-shadow: 0 0 6px #000; }
+
+        /* ---- Tooltip ---- */
+        .tooltip {
+            position: absolute;
+            background: rgba(0,0,0,0.92);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 12px;
+            pointer-events: none;
+            display: none;
+            z-index: 200;
+            max-width: 280px;
+        }
+        .tooltip .tt-name { font-weight: 700; color: #00d4ff; }
+        .tooltip .tt-title { color: #aaa; font-size: 11px; margin-top: 2px; }
+        .tooltip .tt-meta { color: #666; font-size: 10px; margin-top: 4px; }
+
+        /* ---- Legend ---- */
+        .legend {
+            position: fixed; bottom: 14px; right: 14px;
+            background: rgba(0,0,0,0.75); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px; padding: 10px 14px; font-size: 11px;
+            z-index: 100; max-height: 60vh; overflow-y: auto; display: none;
+        }
+        .legend.show { display: block; }
+        .legend-title { font-weight: 600; margin-bottom: 4px; color: #888; font-size: 10px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+        /* Scrollbar for matrix */
+        #matrixWrap::-webkit-scrollbar { width: 8px; height: 8px; }
+        #matrixWrap::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        #matrixWrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+        #matrixWrap::-webkit-scrollbar-corner { background: rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1 id="headerTitle">Organization Chart Viewer</h1>
+        <div class="header-sub" id="headerSub">Load a JSON file to visualize</div>
+        <div class="stats" id="statsBar" style="display:none">
+            <div class="stat"><div class="stat-num" id="statPeople">0</div><div class="stat-label">People</div></div>
+            <div class="stat"><div class="stat-num" id="statDepts">0</div><div class="stat-label">Departments</div></div>
+            <div class="stat"><div class="stat-num" id="statExec">0</div><div class="stat-label">Exec + VP</div></div>
+            <div class="stat"><div class="stat-num" id="statMgmt">0</div><div class="stat-label">Management</div></div>
+        </div>
+        <div class="controls">
+            <label class="primary" for="fileInput">Load JSON</label>
+            <input type="file" id="fileInput" accept=".json">
+            <div class="sep"></div>
+            <button class="view-toggle active" id="btnTreeView" onclick="switchView('tree')" disabled>Tree View</button>
+            <button class="view-toggle" id="btnMatrixView" onclick="switchView('matrix')" disabled>Matrix View</button>
+            <div class="sep"></div>
+            <input type="text" id="searchBox" placeholder="Search name or title..." oninput="doSearch()" disabled>
+            <button id="btnExpand" class="tree-ctrl" onclick="expandLevel()" disabled>Expand Level</button>
+            <button id="btnCollapse" class="tree-ctrl" onclick="collapseLevel()" disabled>Collapse Level</button>
+            <button id="btnReset" class="tree-ctrl" onclick="resetZoom()" disabled>Reset Zoom</button>
+            <button id="btnMExpand" class="matrix-ctrl hidden-btn" onclick="mExpandAll()">Expand All</button>
+            <button id="btnMCollapse" class="matrix-ctrl hidden-btn" onclick="mCollapseAll()">Collapse All</button>
+        </div>
+    </div>
+
+    <div class="landing" id="landing">
+        <div class="drop-zone" id="dropZone">
+            <h2>Org Chart Viewer</h2>
+            <p>Drag &amp; drop a JSON file here, or click below</p>
+            <label class="btn-load" for="fileInput">Choose JSON File</label>
+            <div class="hint">Generated by: python src/linkedin_osint.py ...</div>
+        </div>
+    </div>
+
+    <div id="chart"></div>
+    <div id="matrixWrap"></div>
+    <div class="tooltip" id="tooltip"></div>
+    <div class="legend" id="legend"></div>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+    // ==================================================================
+    // CONSTANTS
+    // ==================================================================
+    const LEVEL_COLORS = {
+        'Executive': '#c0392b', 'VP': '#d35400', 'Director': '#e67e22',
+        'Head': '#f39c12', 'Manager': '#27ae60', 'Lead': '#2980b9',
+        'Senior': '#8e44ad', 'Specialist': '#9b59b6', 'Mid-Level': '#3498db',
+        'Junior': '#1abc9c', 'Entry': '#7f8c8d', 'Staff': '#95a5a6',
+    };
+
+    const LEVEL_RADIUS = {
+        'Executive': 26, 'VP': 24, 'Director': 22, 'Head': 20,
+        'Manager': 18, 'Lead': 16, 'Senior': 15, 'Specialist': 14,
+        'Mid-Level': 13, 'Junior': 12, 'Entry': 12, 'Staff': 11,
+    };
+
+    const LEVEL_ORDER = [
+        'Executive', 'VP', 'Director', 'Head', 'Manager', 'Lead',
+        'Senior', 'Specialist', 'Mid-Level', 'Junior', 'Entry', 'Staff'
+    ];
+
+    const TIER_GROUPS = [
+        {key:'exec_vp',    label:'Executive / VP',      levels:['Executive','VP']},
+        {key:'dir_head',   label:'Director / Head',     levels:['Director','Head']},
+        {key:'mgr_lead',   label:'Manager / Lead',      levels:['Manager','Lead']},
+        {key:'sr_spec',    label:'Senior / Specialist',  levels:['Senior','Specialist']},
+        {key:'mid_jr',     label:'Mid / Junior',         levels:['Mid-Level','Junior']},
+        {key:'entry_staff',label:'Entry / Staff',        levels:['Entry','Staff']},
+    ];
+
+    // ==================================================================
+    // GLOBALS
+    // ==================================================================
+    let svg, g, zoomBehavior, treeRoot, treeLayout, tooltip;
+    let chartReady = false;
+    let currentView = 'tree'; // 'tree' | 'matrix'
+    let storedAllPeople = [];
+    let storedDivisions = [];
+    let storedCompanyName = '';
+    let storedTreeData = null;
+
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+
+    // ==================================================================
+    // FILE LOADING
+    // ==================================================================
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) loadFile(file);
+    });
+
+    const dropZone = document.getElementById('dropZone');
+    const landing = document.getElementById('landing');
+
+    document.body.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    document.body.addEventListener('dragleave', () => { dropZone.classList.remove('dragover'); });
+    document.body.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file && file.name.endsWith('.json')) loadFile(file);
+    });
+
+    function loadFile(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                processData(data, file.name);
+            } catch (err) {
+                alert('Failed to parse JSON: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // ==================================================================
+    // DATA PROCESSING
+    // ==================================================================
+    // ------------------------------------------------------------------
+    // Lightweight client-side title classifier (for non-divisions formats)
+    // ------------------------------------------------------------------
+    const _LEVEL_PATTERNS = [
+        { level: 'Executive', w: 100, re: /\b(ceo|cto|cfo|cio|ciso|coo|cpo|chief|president|founder|co-founder|chairman|chairwoman|general manager|gm)\b/i },
+        { level: 'VP', w: 90, re: /\b(vice president|vp|svp|evp|avp)\b/i },
+        { level: 'Director', w: 80, re: /\b(director)\b/i },
+        { level: 'Head', w: 70, re: /\b(head of|head,)\b/i },
+        { level: 'Manager', w: 60, re: /\b(manager|management)\b/i },
+        { level: 'Lead', w: 50, re: /\b(lead|team lead|tech lead|group lead)\b/i },
+        { level: 'Senior', w: 45, re: /\b(senior|sr\.?|principal)\b/i },
+        { level: 'Specialist', w: 40, re: /\b(specialist|expert|architect|consultant)\b/i },
+        { level: 'Junior', w: 20, re: /\b(junior|jr\.?)\b/i },
+        { level: 'Entry', w: 10, re: /\b(intern|trainee|apprentice|student|graduate)\b/i },
+    ];
+
+    const _DIVISION_PATTERNS = [
+        { div: 'Cyber Security', re: /\b(cyber|security|infosec|soc |siem|penetration|vulnerability|threat|incident response|malware|forensic)\b/i },
+        { div: 'IT Infrastructure', re: /\b(infrastructure|sysadmin|system admin|network|devops|cloud|it support|helpdesk|platform)\b/i },
+        { div: 'Software Development', re: /\b(software|developer|engineer|programming|frontend|backend|full.?stack|web dev|mobile dev|qa |quality assurance|test engineer)\b/i },
+        { div: 'Data & AI', re: /\b(data |machine learning|ai |artificial intelligence|analytics|big data|data science|deep learning|nlp|bi |business intelligence)\b/i },
+        { div: 'R&D', re: /\b(r&d|research|r & d|research and development)\b/i },
+        { div: 'Product', re: /\b(product manager|product owner|product management|product lead)\b/i },
+        { div: 'Project Management', re: /\b(project manage|program manage|scrum|agile|pmo)\b/i },
+        { div: 'Operations', re: /\b(operations|logistics|supply chain|procurement|facilities)\b/i },
+        { div: 'Finance', re: /\b(finance|accounting|accountant|financial|controller|treasury|audit|tax)\b/i },
+        { div: 'HR', re: /\b(human resource|hr |talent|recruit|people |learning & development|l&d|compensation)\b/i },
+        { div: 'Marketing', re: /\b(marketing|brand|communications|content|seo|social media|public relation|pr )\b/i },
+        { div: 'Sales', re: /\b(sales|business develop|account manager|account executive|customer success|pre.?sales)\b/i },
+        { div: 'Legal & Compliance', re: /\b(legal|lawyer|attorney|compliance|regulatory|governance|risk)\b/i },
+        { div: 'Customer Service', re: /\b(customer service|support |call center|customer care|service desk)\b/i },
+    ];
+
+    const _DEPT_COLORS = {
+        'Cyber Security': '#e74c3c', 'IT Infrastructure': '#3498db', 'Software Development': '#9b59b6',
+        'Data & AI': '#1abc9c', 'R&D': '#673ab7', 'Product': '#ff5722', 'Project Management': '#00bcd4',
+        'Operations': '#ff9800', 'Finance': '#f39c12', 'HR': '#e91e63', 'Marketing': '#8bc34a',
+        'Sales': '#4caf50', 'Legal & Compliance': '#607d8b', 'Customer Service': '#009688', 'General': '#95a5a6',
+    };
+
+    function _classifyTitle(title) {
+        if (!title) return { level: 'Staff', w: 5, div: 'General' };
+        let level = 'Staff', w = 5;
+        for (const p of _LEVEL_PATTERNS) {
+            if (p.re.test(title)) { level = p.level; w = p.w; break; }
+        }
+        let div = 'General';
+        for (const p of _DIVISION_PATTERNS) {
+            if (p.re.test(title)) { div = p.div; break; }
+        }
+        return { level, w, div };
+    }
+
+    // Convert a flat array of people (with name/title/url) into the divisions format
+    function _buildDivisionsFromPeople(rawPeople) {
+        const divMap = {};  // divName -> { levelName -> [people] }
+        for (const p of rawPeople) {
+            const cls = _classifyTitle(p.title || '');
+            const divName = cls.div;
+            const levelName = cls.level;
+            if (!divMap[divName]) divMap[divName] = {};
+            if (!divMap[divName][levelName]) divMap[divName][levelName] = [];
+            divMap[divName][levelName].push({
+                name: p.name || 'Unknown',
+                title: p.title || '',
+                role_level: levelName,
+                division_name: divName,
+                profile_url: p.profile_url || p.profileUrl || p.url || '',
+                profile_image_url: p.profile_image_url || p.profileImageUrl || p.image_url || '',
+            });
+        }
+        const hierOrder = ['Executive','VP','Director','Head','Manager','Lead','Senior','Specialist','Mid-Level','Junior','Entry','Staff'];
+        const hierWeights = {Executive:100,VP:90,Director:80,Head:70,Manager:60,Lead:50,Senior:45,Specialist:40,'Mid-Level':30,Junior:20,Entry:10,Staff:5};
+        const divisions = [];
+        for (const [divName, levels] of Object.entries(divMap)) {
+            const levelsList = [];
+            for (const ln of hierOrder) {
+                if (levels[ln] && levels[ln].length > 0) {
+                    levelsList.push({ level: hierWeights[ln] || 5, name: ln, people: levels[ln] });
+                }
+            }
+            const total = levelsList.reduce((s, l) => s + l.people.length, 0);
+            divisions.push({
+                id: divName.toLowerCase().replace(/ /g, '_').replace(/&/g, 'and'),
+                name: divName,
+                color: _DEPT_COLORS[divName] || '#95a5a6',
+                total_people: total,
+                levels: levelsList,
+            });
+        }
+        divisions.sort((a, b) => b.total_people - a.total_people);
+        return divisions;
+    }
+
+    // ------------------------------------------------------------------
+    // DATA PROCESSING (supports divisions, companies, and profiles formats)
+    // ------------------------------------------------------------------
+    function processData(data, filename) {
+        let divisions = data.divisions || [];
+
+        // Format: batch scrape ("companies" key with people arrays)
+        if (divisions.length === 0 && data.companies && Array.isArray(data.companies)) {
+            const rawPeople = [];
+            for (const company of data.companies) {
+                for (const p of (company.people || [])) {
+                    rawPeople.push(p);
+                }
+            }
+            if (rawPeople.length > 0) divisions = _buildDivisionsFromPeople(rawPeople);
+        }
+
+        // Format: deep dive / profiles list ("profiles" key)
+        if (divisions.length === 0 && data.profiles && Array.isArray(data.profiles)) {
+            const rawPeople = data.profiles.map(p => ({
+                name: p.name || 'Unknown',
+                title: p.headline || p.original_title || p.title || '',
+                profile_url: p.profile_url || '',
+                profile_image_url: p.profile_image_url || '',
+            }));
+            if (rawPeople.length > 0) divisions = _buildDivisionsFromPeople(rawPeople);
+        }
+
+        // Format: single company ("people" key)
+        if (divisions.length === 0 && data.people && Array.isArray(data.people)) {
+            divisions = _buildDivisionsFromPeople(data.people);
+        }
+
+        if (divisions.length === 0) { alert('No divisions found in JSON. Supported formats: org chart (divisions), batch scrape (companies), deep dive (profiles), or single company (people).'); return; }
+
+        let companyName = data.company_name || '';
+        if (!companyName) {
+            const m = filename.match(/org_chart_(.+)\.json$/i);
+            if (m) companyName = m[1].replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            else companyName = filename.replace('.json', '');
+        }
+
+        const allPeople = [];
+        divisions.forEach(div => {
+            (div.levels || []).forEach(lv => {
+                (lv.people || []).forEach(p => {
+                    allPeople.push({
+                        name: p.name || 'Unknown',
+                        title: p.title || '',
+                        level: p.role_level || lv.name || 'Staff',
+                        dept: p.division_name || div.name || 'General',
+                        deptColor: div.color || '#95a5a6',
+                        profileUrl: p.profile_url || '',
+                        imageUrl: p.profile_image_url || '',
+                    });
+                });
+            });
+        });
+
+        // Store globals
+        storedAllPeople = allPeople;
+        storedDivisions = divisions;
+        storedCompanyName = companyName;
+
+        // Stats
+        const execCount = allPeople.filter(p => p.level === 'Executive' || p.level === 'VP').length;
+        const mgmtCount = allPeople.filter(p => ['Director','Head','Manager'].includes(p.level)).length;
+        const deptNames = [...new Set(allPeople.map(p => p.dept))];
+
+        document.getElementById('headerTitle').textContent = 'Organization Chart';
+        document.getElementById('headerSub').textContent = 'Click nodes to collapse/expand \u2022 Scroll to zoom \u2022 Drag to pan \u2022 Double-click avatars for LinkedIn';
+        document.getElementById('statsBar').style.display = 'flex';
+        document.getElementById('statPeople').textContent = allPeople.length;
+        document.getElementById('statDepts').textContent = deptNames.length;
+        document.getElementById('statExec').textContent = execCount;
+        document.getElementById('statMgmt').textContent = mgmtCount;
+        document.title = companyName + ' - Org Chart';
+
+        // Enable controls
+        document.getElementById('searchBox').disabled = false;
+        document.getElementById('btnExpand').disabled = false;
+        document.getElementById('btnCollapse').disabled = false;
+        document.getElementById('btnReset').disabled = false;
+        document.getElementById('btnTreeView').disabled = false;
+        document.getElementById('btnMatrixView').disabled = false;
+
+        // Build data for both views
+        storedTreeData = buildTree(companyName, divisions, allPeople);
+        buildLegend(divisions);
+
+        // Hide landing
+        landing.classList.add('hidden');
+
+        // Render default view
+        currentView = 'tree';
+        renderTree(storedTreeData);
+        renderMatrix(allPeople);
+        switchView('tree');
+    }
+
+    // ==================================================================
+    // VIEW TOGGLE
+    // ==================================================================
+    function switchView(view) {
+        currentView = view;
+        const chartEl = document.getElementById('chart');
+        const matrixEl = document.getElementById('matrixWrap');
+        const btnTree = document.getElementById('btnTreeView');
+        const btnMatrix = document.getElementById('btnMatrixView');
+
+        if (view === 'tree') {
+            chartEl.style.display = 'block';
+            matrixEl.style.display = 'none';
+            btnTree.classList.add('active');
+            btnMatrix.classList.remove('active');
+            // Show tree buttons, hide matrix buttons
+            document.querySelectorAll('.tree-ctrl').forEach(b => b.classList.remove('hidden-btn'));
+            document.querySelectorAll('.matrix-ctrl').forEach(b => b.classList.add('hidden-btn'));
+            document.getElementById('headerSub').textContent = 'Click nodes to collapse/expand \u2022 Scroll to zoom \u2022 Drag to pan \u2022 Double-click avatars for LinkedIn';
+        } else {
+            chartEl.style.display = 'none';
+            matrixEl.style.display = 'block';
+            btnTree.classList.remove('active');
+            btnMatrix.classList.add('active');
+            // Show matrix buttons, hide tree buttons
+            document.querySelectorAll('.tree-ctrl').forEach(b => b.classList.add('hidden-btn'));
+            document.querySelectorAll('.matrix-ctrl').forEach(b => b.classList.remove('hidden-btn'));
+            document.getElementById('headerSub').textContent = 'Click a number to expand \u2022 Hover avatars for details \u2022 Click avatars to open LinkedIn';
+        }
+        // Re-run search in new view
+        doSearch();
+    }
+
+    // ==================================================================
+    // TREE VIEW -- buildTree, renderTree, update, etc.
+    // ==================================================================
+    function buildTree(companyName, divisions, allPeople) {
+        const root = {
+            name: 'Org.', title: companyName, level: 'root', dept: '', deptColor: '',
+            imageUrl: '', profileUrl: '', _isRoot: true, children: []
+        };
+
+        const deptMap = {};
+        allPeople.forEach(p => {
+            if (!deptMap[p.dept]) deptMap[p.dept] = {};
+            if (!deptMap[p.dept][p.level]) deptMap[p.dept][p.level] = [];
+            deptMap[p.dept][p.level].push(p);
+        });
+
+        const deptsSorted = Object.keys(deptMap).sort((a, b) => {
+            const ca = Object.values(deptMap[a]).reduce((s, arr) => s + arr.length, 0);
+            const cb = Object.values(deptMap[b]).reduce((s, arr) => s + arr.length, 0);
+            return cb - ca;
+        });
+
+        deptsSorted.forEach(dept => {
+            const levels = deptMap[dept];
+            const deptColor = (Object.values(levels)[0] || [{}])[0]?.deptColor || '#95a5a6';
+            const totalInDept = Object.values(levels).reduce((s, arr) => s + arr.length, 0);
+
+            const deptNode = {
+                name: dept, title: `${totalInDept} people`,
+                level: 'dept', dept: dept, deptColor: deptColor,
+                imageUrl: '', profileUrl: '', _isDept: true, children: []
+            };
+
+            let parentNodes = [deptNode];
+            LEVEL_ORDER.forEach(lv => {
+                const peeps = levels[lv];
+                if (!peeps || peeps.length === 0) return;
+                const currentNodes = peeps.map(p => ({ ...p, children: [], _children: null }));
+                currentNodes.forEach((node, i) => {
+                    const pidx = Math.min(Math.floor(i * parentNodes.length / currentNodes.length), parentNodes.length - 1);
+                    if (!parentNodes[pidx].children) parentNodes[pidx].children = [];
+                    parentNodes[pidx].children.push(node);
+                });
+                parentNodes = currentNodes;
+            });
+
+            root.children.push(deptNode);
+        });
+
+        return root;
+    }
+
+    function buildLegend(divisions) {
+        const legendEl = document.getElementById('legend');
+        legendEl.innerHTML = '';
+        legendEl.classList.add('show');
+
+        let html = '<div class="legend-title">Departments</div>';
+        const seenDepts = new Set();
+        divisions.forEach(div => {
+            if (seenDepts.has(div.name)) return;
+            seenDepts.add(div.name);
+            html += `<div class="legend-item"><div class="legend-dot" style="background:${div.color || '#95a5a6'}"></div><span>${div.name}</span></div>`;
+        });
+        html += '<div class="legend-title" style="margin-top:8px">Hierarchy</div>';
+        LEVEL_ORDER.forEach(lv => {
+            html += `<div class="legend-item"><div class="legend-dot" style="background:${LEVEL_COLORS[lv] || '#95a5a6'}"></div><span>${lv}</span></div>`;
+        });
+        legendEl.innerHTML = html;
+    }
+
+    function renderTree(treeData) {
+        d3.select('#chart').selectAll('*').remove();
+
+        svg = d3.select('#chart').append('svg').attr('width', W).attr('height', H);
+        const defs = svg.append('defs');
+        g = svg.append('g');
+
+        zoomBehavior = d3.zoom().scaleExtent([0.1, 4])
+            .on('zoom', (event) => g.attr('transform', event.transform));
+        svg.call(zoomBehavior);
+        svg.call(zoomBehavior.transform, d3.zoomIdentity.translate(W / 2, H / 3).scale(0.7));
+
+        tooltip = d3.select('#tooltip');
+
+        treeRoot = d3.hierarchy(treeData);
+        treeRoot.x0 = 0;
+        treeRoot.y0 = 0;
+
+        treeLayout = d3.tree().nodeSize([55, 110])
+            .separation((a, b) => a.parent === b.parent ? 1.1 : 1.6);
+
+        chartReady = true;
+        updateTree(treeRoot);
+    }
+
+    function getRadius(d) {
+        if (d.data._isRoot) return 30;
+        if (d.data._isDept) return 24;
+        return LEVEL_RADIUS[d.data.level] || 13;
+    }
+    function getStroke(d) { return d.data._isRoot ? '#00d4ff' : (d.data.deptColor || '#555'); }
+    function getFill(d) {
+        if (d.data._isRoot) return '#1a1e35';
+        if (d.data._isDept) return d.data.deptColor || '#555';
+        return '#1a1e35';
+    }
+    function mkInitials(name) {
+        const parts = (name || '?').trim().split(/\s+/);
+        if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        return (parts[0] || '?')[0].toUpperCase();
+    }
+    function diagonal(d) {
+        return `M${d.source.x},${d.source.y}C${d.source.x},${(d.source.y+d.target.y)/2} ${d.target.x},${(d.source.y+d.target.y)/2} ${d.target.x},${d.target.y}`;
+    }
+    function countDesc(d) {
+        const kids = d._children || d.children || [];
+        let c = kids.length;
+        kids.forEach(k => c += countDesc(k));
+        return c;
+    }
+
+    function updateTree(source) {
+        if (!chartReady) return;
+        const dur = 400;
+        const tree = treeLayout(treeRoot);
+        const nodes = tree.descendants();
+        const links = tree.links();
+        const defs = svg.select('defs');
+
+        // Links
+        const link = g.selectAll('.link').data(links, d => d.target.data.name + (d.target.data.dept||'') + d.target.depth);
+        const linkEnter = link.enter().insert('path','g').attr('class','link')
+            .attr('d', () => { const o={x:source.x0||0,y:source.y0||0}; return diagonal({source:o,target:o}); });
+        linkEnter.merge(link).transition().duration(dur).attr('d', d => diagonal(d));
+        link.exit().transition().duration(dur)
+            .attr('d', () => { const o={x:source.x,y:source.y}; return diagonal({source:o,target:o}); }).remove();
+
+        // Nodes
+        const node = g.selectAll('.node').data(nodes, d => d.data.name + (d.data.dept||'') + d.depth);
+        const nodeEnter = node.enter().append('g').attr('class','node')
+            .attr('transform', () => `translate(${source.x0||0},${source.y0||0})`)
+            .on('click', (event, d) => {
+                if (d.children) { d._children = d.children; d.children = null; }
+                else if (d._children) { d.children = d._children; d._children = null; }
+                updateTree(d);
+            })
+            .on('mouseover', (event, d) => {
+                if (d.data._isRoot) { tooltip.style('display','block').html(`<div class="tt-name">${esc(d.data.title)}</div>`); return; }
+                let h;
+                if (d.data._isDept) h = `<div class="tt-name">${esc(d.data.name)}</div><div class="tt-title">${esc(d.data.title)}</div>`;
+                else h = `<div class="tt-name">${esc(d.data.name)}</div><div class="tt-title">${esc(d.data.title)}</div><div class="tt-meta">${esc(d.data.level)} &bull; ${esc(d.data.dept)}</div>`;
+                tooltip.style('display','block').html(h);
+            })
+            .on('mousemove', (event) => { tooltip.style('left',(event.pageX+14)+'px').style('top',(event.pageY-12)+'px'); })
+            .on('mouseout', () => tooltip.style('display','none'))
+            .on('dblclick', (event, d) => { if (d.data.profileUrl) window.open(d.data.profileUrl, '_blank'); });
+
+        // Clips
+        nodeEnter.each(function(d) {
+            const r = getRadius(d);
+            const cid = 'clip-' + safeId(d);
+            if (defs.select('#'+cid).empty()) defs.append('clipPath').attr('id',cid).append('circle').attr('r',r);
+        });
+
+        // Circle
+        nodeEnter.append('circle').attr('r', d => getRadius(d)).attr('fill', d => getFill(d))
+            .attr('stroke', d => getStroke(d)).attr('stroke-width', d => d.data._isRoot ? 2 : 3)
+            .attr('cursor','pointer').style('transition','filter 0.15s')
+            .on('mouseover', function() { d3.select(this).style('filter','drop-shadow(0 0 8px rgba(0,212,255,0.6))'); })
+            .on('mouseout', function() { d3.select(this).style('filter','none'); });
+
+        // Avatar images
+        nodeEnter.filter(d => !d.data._isRoot && !d.data._isDept && d.data.imageUrl)
+            .append('image').attr('xlink:href', d => d.data.imageUrl)
+            .attr('x', d => -getRadius(d)).attr('y', d => -getRadius(d))
+            .attr('width', d => getRadius(d)*2).attr('height', d => getRadius(d)*2)
+            .attr('clip-path', d => `url(#clip-${safeId(d)})`)
+            .attr('preserveAspectRatio','xMidYMid slice')
+            .on('error', function(event, d) { d3.select(this).remove(); addInitials(d3.select(this.parentNode), d); });
+
+        // Initials fallback
+        nodeEnter.filter(d => !d.data._isRoot && !d.data._isDept && !d.data.imageUrl)
+            .each(function(d) { addInitials(d3.select(this), d); });
+
+        // Dept label
+        nodeEnter.filter(d => d.data._isDept).append('text').attr('class','dept-node-label').attr('dy',4)
+            .text(d => { const a = d.data.name.split(/\s+/).map(w=>w[0]).join('').toUpperCase(); return a.length<=4?a:a.substring(0,3); });
+
+        // Root label
+        nodeEnter.filter(d => d.data._isRoot).append('text').attr('text-anchor','middle').attr('dy',4)
+            .attr('fill','#00d4ff').attr('font-size','11px').attr('font-weight','700').attr('pointer-events','none').text('Org.');
+
+        // Name label
+        nodeEnter.append('text').attr('class','node-label').attr('dy', d => getRadius(d)+12)
+            .text(d => { if (d.data._isRoot) return ''; if (d.data._isDept) return d.data.name; return d.data.name.split(' ')[0]; });
+
+        // Collapse indicator
+        nodeEnter.append('text').attr('class','collapse-indicator').attr('text-anchor','middle')
+            .attr('dy', d => -getRadius(d)-4).text('');
+
+        // Update
+        const nodeUpdate = nodeEnter.merge(node);
+        nodeUpdate.transition().duration(dur).attr('transform', d => `translate(${d.x},${d.y})`);
+        nodeUpdate.select('.collapse-indicator').text(d => d._children ? `+${countDesc(d)}` : '');
+
+        // Exit
+        node.exit().transition().duration(dur).attr('transform', () => `translate(${source.x},${source.y})`).remove();
+
+        nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
+    }
+
+    function addInitials(sel, d) {
+        const r = getRadius(d);
+        const lc = LEVEL_COLORS[d.data.level] || '#555';
+        sel.insert('circle','text').attr('r',r-2).attr('fill',lc).attr('pointer-events','none');
+        sel.append('text').attr('text-anchor','middle').attr('dy',4).attr('fill','#fff')
+            .attr('font-size', Math.max(8,r*0.7)+'px').attr('font-weight','700').attr('pointer-events','none')
+            .text(mkInitials(d.data.name));
+    }
+
+    function safeId(d) { return (d.data.name+'_'+(d.data.dept||'')+'_'+d.depth).replace(/[^a-zA-Z0-9_]/g,'_'); }
+    function esc(t) { const e=document.createElement('span'); e.textContent=t||''; return e.innerHTML; }
+
+    // ==================================================================
+    // MATRIX VIEW
+    // ==================================================================
+    function renderMatrix(allPeople) {
+        const wrap = document.getElementById('matrixWrap');
+
+        // Build tier -> level mapping
+        const levelToTier = {};
+        TIER_GROUPS.forEach(tg => tg.levels.forEach(lv => { levelToTier[lv] = tg.key; }));
+
+        // Get active departments sorted by count
+        const deptCounts = {};
+        allPeople.forEach(p => { deptCounts[p.dept] = (deptCounts[p.dept]||0)+1; });
+        const activeDepts = Object.keys(deptCounts).sort((a,b) => deptCounts[b]-deptCounts[a]);
+
+        // Build matrix
+        const matrix = {};
+        TIER_GROUPS.forEach(tg => { matrix[tg.key] = {}; activeDepts.forEach(d => { matrix[tg.key][d] = []; }); });
+        allPeople.forEach(p => {
+            const tk = levelToTier[p.level] || 'entry_staff';
+            if (matrix[tk] && matrix[tk][p.dept]) matrix[tk][p.dept].push(p);
+        });
+
+        // Active tiers (non-empty)
+        const activeTiers = TIER_GROUPS.filter(tg => activeDepts.some(d => matrix[tg.key][d].length > 0));
+
+        // Dept colors from first person in each dept
+        const deptColorMap = {};
+        allPeople.forEach(p => { if (!deptColorMap[p.dept]) deptColorMap[p.dept] = p.deptColor; });
+
+        // Column headers
+        let colHeaders = '';
+        activeDepts.forEach(dept => {
+            const dc = deptColorMap[dept] || '#95a5a6';
+            const count = TIER_GROUPS.reduce((s,tg) => s + (matrix[tg.key][dept]||[]).length, 0);
+            colHeaders += `<th class="col-header" style="background:${dc}">${esc(dept)}<br><span class="col-count">${count}</span></th>`;
+        });
+
+        // Rows
+        let cellIdx = 0;
+        let rowsHtml = '';
+        activeTiers.forEach(tg => {
+            const tierColor = LEVEL_COLORS[tg.levels[0]] || '#95a5a6';
+            let cells = '';
+            activeDepts.forEach(dept => {
+                const people = matrix[tg.key][dept];
+                if (!people || people.length === 0) {
+                    cells += '<td class="m-cell empty"><span class="count-zero">&ndash;</span></td>';
+                    return;
+                }
+                cellIdx++;
+                const cid = 'mc' + cellIdx;
+                let avatars = '';
+                people.sort((a,b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())).forEach(p => {
+                    const nm = esc(p.name);
+                    const tt = `${nm}&#10;${esc(p.title)}&#10;${esc(p.level)} | ${esc(p.dept)}`;
+                    const lvC = LEVEL_COLORS[p.level] || '#95a5a6';
+                    const dpC = deptColorMap[p.dept] || '#95a5a6';
+                    const open = p.profileUrl ? `<a href="${esc(p.profileUrl)}" target="_blank" rel="noopener" title="${tt}">` : `<span title="${tt}">`;
+                    const close = p.profileUrl ? '</a>' : '</span>';
+                    const ini = mkInitials(p.name);
+                    if (p.imageUrl) {
+                        avatars += `${open}<div class="m-avatar" style="border-color:${dpC}"><img src="${esc(p.imageUrl)}" alt="${nm}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="m-initials" style="background:${lvC};display:none">${ini}</div></div>${close}`;
+                    } else {
+                        avatars += `${open}<div class="m-avatar" style="border-color:${dpC}"><div class="m-initials" style="background:${lvC}">${ini}</div></div>${close}`;
+                    }
+                });
+                cells += `<td class="m-cell" onclick="mToggle('${cid}')"><span class="m-count-badge" id="${cid}_b" style="background:${tierColor}">${people.length}</span><div class="m-people" id="${cid}_p">${avatars}</div></td>`;
+            });
+            rowsHtml += `<tr><th class="row-header" style="background:${tierColor}">${esc(tg.label)}</th>${cells}</tr>`;
+        });
+
+        wrap.innerHTML = `<table><thead><tr><th class="corner"></th>${colHeaders}</tr></thead><tbody>${rowsHtml}</tbody></table>`;
+    }
+
+    function mToggle(cid) {
+        const badge = document.getElementById(cid+'_b');
+        const people = document.getElementById(cid+'_p');
+        if (!badge || !people) return;
+        if (people.classList.contains('show')) {
+            people.classList.remove('show');
+            badge.style.display = '';
+        } else {
+            people.classList.add('show');
+            badge.style.display = 'none';
+        }
+    }
+
+    function mExpandAll() {
+        document.querySelectorAll('#matrixWrap .m-count-badge').forEach(b => b.style.display = 'none');
+        document.querySelectorAll('#matrixWrap .m-people').forEach(p => p.classList.add('show'));
+    }
+
+    function mCollapseAll() {
+        document.querySelectorAll('#matrixWrap .m-count-badge').forEach(b => b.style.display = '');
+        document.querySelectorAll('#matrixWrap .m-people').forEach(p => p.classList.remove('show'));
+    }
+
+    // ==================================================================
+    // TREE CONTROLS
+    // ==================================================================
+    function expandLevel() {
+        if (!chartReady) return;
+        let minD = Infinity;
+        treeRoot.descendants().forEach(d => { if (d._children && d._children.length > 0) minD = Math.min(minD, d.depth); });
+        if (minD === Infinity) return;
+        treeRoot.descendants().forEach(d => { if (d.depth === minD && d._children) { d.children = d._children; d._children = null; } });
+        updateTree(treeRoot);
+    }
+
+    function collapseLevel() {
+        if (!chartReady) return;
+        let maxD = 0;
+        treeRoot.descendants().forEach(d => { if (d.children && d.children.length > 0) maxD = Math.max(maxD, d.depth); });
+        if (maxD <= 0) return;
+        treeRoot.descendants().forEach(d => { if (d.depth === maxD && d.children) { d._children = d.children; d.children = null; } });
+        updateTree(treeRoot);
+    }
+
+    function resetZoom() {
+        if (!svg) return;
+        svg.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity.translate(W/2, H/3).scale(0.7));
+    }
+
+    // ==================================================================
+    // SEARCH (works in both views)
+    // ==================================================================
+    function doSearch() {
+        const term = document.getElementById('searchBox').value.toLowerCase().trim();
+
+        if (currentView === 'tree' && chartReady) {
+            if (term) {
+                treeRoot.descendants().forEach(d => { if (d._children) { d.children = d._children; d._children = null; } });
+                updateTree(treeRoot);
+            }
+            g.selectAll('.node').attr('opacity', d => {
+                if (!term) return 1;
+                if (d.data._isRoot || d.data._isDept) return 1;
+                const hay = `${d.data.name} ${d.data.title} ${d.data.dept} ${d.data.level}`.toLowerCase();
+                return hay.includes(term) ? 1 : 0.1;
+            });
+        } else if (currentView === 'matrix') {
+            if (term) mExpandAll();
+            document.querySelectorAll('#matrixWrap .m-avatar').forEach(av => {
+                const parent = av.closest('a') || av.closest('span');
+                const tip = (parent && parent.getAttribute('title')) || '';
+                if (!term || tip.toLowerCase().includes(term)) av.classList.remove('dimmed');
+                else av.classList.add('dimmed');
+            });
+            if (!term) document.querySelectorAll('#matrixWrap .m-avatar').forEach(av => av.classList.remove('dimmed'));
+        }
+    }
+
+    // ==================================================================
+    // WINDOW RESIZE
+    // ==================================================================
+    window.addEventListener('resize', () => {
+        if (svg) { svg.attr('width', window.innerWidth).attr('height', window.innerHeight); }
+    });
+    </script>
+</body>
+</html>
