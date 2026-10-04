@@ -641,14 +641,53 @@ linkedin profile me --fields "firstName,lastName,headline"  # Only specific fiel
 linkedin profile me --quiet             # No output, exit code only
 ```
 
+#### `osint_*` (13 OSINT tools)
+
+Ported from the legacy Python toolkits (`legacy/python/`) into the TypeScript
+engine. Same cookie session as the platform tools; `osint_classify`,
+`osint_names`, `osint_matrix`, `osint_stats`, and `osint_scan` run fully
+offline.
+
+| Tool | Parameters | Notes |
+|------|-----------|-------|
+| `osint_discover` | `geo` (name or code), `keyword?`, `industry?`, `limit?` (10), `region_name?`, `out_dir?`, `use_ai?`, `search_objective?`, `query_id?` | Company search w/ companyHqGeo facet; writes discovered JSON |
+| `osint_employees` | `company` (slug), `company_id?`, `geo?`, `keywords?`, `geoblast?`, `depth?`, `max_profiles?`, `domain?`, `out_dir?`, `format?`, `query_id?`, `delay_ms?` | 50/page people search; outer loops bypass the 1,000 cap; UPSELL_LIMIT detection; `--domain` also writes the 6 username files |
+| `osint_names` | `name?` or `file?`, `domain?`, `prefix?`, `out_dir?` | NameMutator permutations (flast/f.last/firstl/first.last/first/lastf + rawnames/metadata) |
+| `osint_classify` | `title?` or `file?`, `use_ai?`, `out_dir?` | Rules engine (12 levels x 20 divisions) learned from ~30K profiles |
+| `osint_ai-score` | `file`, `objective`, `out_dir?` | Groq company relevance scoring (skips silently without GROQ_API_KEY) |
+| `osint_ai-classify` | `file`, `out_dir?` | Groq batch title classification |
+| `osint_orgchart` | `file`, `company?`, `use_ai?`, `out_dir?` | Hierarchical org JSON for the viewer/matrix |
+| `osint_matrix` | `file`, `name?`, `out_dir?` | Standalone HTML matrix org chart |
+| `osint_stats` | `files` (comma-separated), `verbose?` | Distributions + unclassified samples |
+| `osint_scan` | `directory`, `suggest?` (25), `json_suggest?` | Suggested title_overrides (never auto-applied) |
+| `osint_email-lookup` | `file?`/`email?`, `token_file?`, `skip_email?`, `max_failures?` (10), `out_dir?` | Outlook/Delve deanonymization; needs LINKEDIN_MS_TOKEN |
+| `osint_deep-dive` | `public_id`, `use_ai?` | profileView normalization + optional AI deep classification |
+| `osint_funnel` | `geo?`, `keyword?`, `industry?`, `limit?` (5), `depth?`, `max_profiles?`, `input?`, `start_phase?`/`end_phase?`, `company?`, `use_ai?`, `out_dir?` | discover → employees → orgchart → matrix pipeline |
+
+Env additions: `GROQ_API_KEY` (optional AI), `LINKEDIN_MS_TOKEN` (email lookup
+only, never logged).
+
+---
+
+## Legacy
+
+The three original Python projects are archived intact under
+`legacy/python/` (see its README for the port mapping). They are reference
+implementations; the `osint` command group supersedes them for API-reachable
+capabilities. The Selenium browser stack remains useful only on Linux with
+Firefox and is not runnable from this CLI.
+
+---
+
 ## Rate Limiting
 
 LinkedIn has aggressive rate limiting. The client automatically:
-- Enforces minimum 1-second gaps between requests
-- Retries on 429 (rate limit) and 5xx errors with exponential backoff
+- Enforces minimum 2-second gaps between requests
+- Retries on 429 (rate limit) and 5xx errors with human-like random backoff
 - Detects CAPTCHA/challenge pages and throws a clear error
 
-For bulk operations, add your own delays between calls.
+For bulk operations (`osint employees --geoblast`, `osint funnel`), the client's
+built-in gaps apply per request; add `--delay-ms` for extra caution.
 
 ## Common URN Patterns
 

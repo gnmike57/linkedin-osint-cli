@@ -1,8 +1,50 @@
 # linkedincli
 
-Full LinkedIn platform management from your terminal. 43 commands for profiles, posts, messaging, connections, search, feed, engagement, and more — powered by cookie session auth.
+Full LinkedIn platform management from your terminal. 43 platform commands (profiles, posts, messaging, connections, search, feed, engagement) **plus an OSINT suite**: company discovery, employee scraping, username generation, role classification, org charts, and email deanonymization — powered by cookie session auth.
 
-Works as a **CLI** and an **MCP server** (for Claude Code, Cursor, Windsurf, and other AI agents).
+Works as a **CLI** and an **MCP server** (for Claude Code, Cursor, Windsurf, and other AI agents). Every command — platform and OSINT — is exposed as an MCP tool automatically.
+
+## OSINT Suite
+
+The `osint` command group ports the best of three legacy Python toolkits
+(`legacy/python/`) into the TypeScript engine — API-native, no browser needed:
+
+| Command | What it does | Ported from |
+|---------|--------------|-------------|
+| `osint discover` | Discover companies by region (`--geo`), keyword, industry | osint_discover.py |
+| `osint employees` | Scrape a company's employees (50/page; `--keywords` / `--geoblast` outer loops bypass the 1,000-result cap; detects the commercial-search UPSELL_LIMIT) | linkedin2username |
+| `osint names` | Username/email permutations (`flast`, `f.last`, `firstl`, `first.last`, `first`, `lastf`) from a name or employees file | linkedin2username NameMutator |
+| `osint classify` | Classify titles into 12 hierarchy levels x 20 divisions (rules engine learned from ~30K profiles) | osint_classify_rules.py |
+| `osint ai-score` / `osint ai-classify` | Groq LLM relevance scoring / batch classification (graceful no-op without `GROQ_API_KEY`) | osint_classify_ai.py |
+| `osint orgchart` | Build hierarchical org chart JSON (divisions x levels) | osint_build_orgchart.py |
+| `osint matrix` | Standalone HTML matrix org chart (search, expand/collapse, avatars) | osint_generate_html.py |
+| `osint stats` / `osint scan` | Classification health + suggested `title_overrides` for the rules JSON | osint_stats.py / osint_scan.py |
+| `osint deep-dive` | One profile's about/experience/education/skills via the profileView endpoint, optional AI deep classification | osint_scrape_profiles.py |
+| `osint email-lookup` | Email → LinkedIn profile via Outlook/Delve (needs a Microsoft token) | outlook_http_client.py |
+| `osint funnel` | The full pipeline: discover → employees → orgchart → matrix, with resume | osint_funnel.py |
+
+Offline-safe (no cookies needed): `classify --title`, `names --name`, `matrix`, `stats`, `scan`.
+Everything else uses the same cookie session as the platform commands.
+
+```bash
+# Discover cybersecurity companies in the USA
+linkedin osint discover --geo USA --keyword cybersecurity --limit 10
+
+# Scrape their employees (and generate username lists for a domain)
+linkedin osint employees acme-corp --keywords "sales,engineering" --domain acme.com
+
+# Classify one title offline
+linkedin osint classify --title "Senior Cyber Security Manager"
+
+# Full funnel: discover -> employees -> org chart -> HTML matrix
+linkedin osint funnel --geo USA --keyword fintech --limit 5
+
+# Explore the result interactively
+# (open assets/org_chart_viewer.html and load output/org_chart_*.json)
+```
+
+The interactive org chart viewer ships at `assets/org_chart_viewer.html` (tree + matrix modes, demo data in `assets/demo_org_chart.json`).
+
 
 ## Install
 

@@ -13,13 +13,16 @@ src/
 ├── core/
 │   ├── types.ts          # CommandDefinition, LinkedInClient interfaces
 │   ├── client.ts         # HTTP client (Voyager API, cookie auth, retry)
-│   ├── handler.ts        # executeCommand() — builds requests from definitions
-│   ├── auth.ts           # resolveAuth() — flag > env > config file
+│   ├── transport.ts      # Pluggable transport (fetch / curl-impersonate)
+│   ├── redirects.ts      # 3xx classification (auth/challenge walls)
+│   ├── auth.ts           # resolveAuth() — chrome > flags > env > config file
+│   ├── chrome-cookies.ts # Chrome cookie-store decryption (local only)
 │   ├── config.ts         # ~/.linkedin-cli/config.json manager
 │   ├── errors.ts         # Typed error classes
+│   ├── handler.ts        # executeCommand() — builds requests from definitions
 │   └── output.ts         # JSON formatting, --fields, --quiet
 ├── commands/
-│   ├── index.ts          # allCommands registry + registerAllCommands()
+│   ├── index.ts          # allCommands registry + registerAllCommands() + lazy client
 │   ├── auth/login.ts     # login, logout, status (special commands)
 │   ├── mcp/index.ts      # MCP start command
 │   ├── profile/view.ts   # 9 profile commands
@@ -31,10 +34,33 @@ src/
 │   ├── search/search.ts  # 4 search commands (people, companies, jobs, posts)
 │   ├── companies/        # 3 company commands
 │   ├── jobs/jobs.ts      # 2 job commands
-│   └── analytics/        # 1 analytics command
+│   ├── analytics/        # 1 analytics command
+│   └── osint/            # 13 OSINT commands (see below)
+│       ├── index.ts      # osintCommands registry
+│       ├── util.ts       # file output helpers + company-ID resolution
+│       ├── discover.ts  employees.ts  names.ts  classify.ts  ai.ts
+│       ├── orgchart.ts  matrix.ts  stats.ts  scan.ts
+│       ├── email-lookup.ts  deep-dive.ts  funnel.ts
+│       └── (handlers orchestrate the src/osint logic modules)
+├── osint/                # Pure-logic OSINT layer (unit-testable)
+│   ├── names.ts          # NameMutator port (username permutations)
+│   ├── classify.ts       # Rules engine port (data-driven)
+│   ├── data/classification_rules.json  # ~30K-profile rules (shipped)
+│   ├── prompts.ts        # Inlined Groq prompts (source: prompts/*.md)
+│   ├── prompts/*.md      # Canonical prompt markdown
+│   ├── ai-client.ts      # Groq chat + score/classify/deep-classify
+│   ├── employees-query.ts # Voyager GraphQL people-search builder/parser
+│   ├── geo-codes.ts  industries.ts  csv.ts
+│   ├── orgchart.ts       # People loaders + hierarchical builder
+│   ├── matrix.ts         # HTML matrix generator
+│   ├── delve.ts          # Outlook/Delve email lookup
+│   └── stats.ts          # Classification stats + override suggestions
 └── mcp/
     └── server.ts         # MCP server registration loop
 ```
+
+Plus `assets/org_chart_viewer.html` (interactive viewer) and
+`legacy/python/` (the three original projects, archived intact).
 
 ## Authentication
 
@@ -55,6 +81,32 @@ Cookie-based auth via LinkedIn's Voyager API. Two cookies required:
 1. Add a `CommandDefinition` to the appropriate `src/commands/{group}/` file
 2. Export it from the group's command array
 3. The command is auto-registered in both CLI and MCP — no other changes needed
+
+## OSINT Modules
+
+The `osint` command group (13 commands) orchestrates pure-logic modules in
+`src/osint/`:
+
+- **names.ts** — NameMutator (username/email permutations), ported 1:1 from
+  linkedin2username and verified against its pytest suite.
+- **classify.ts** — data-driven role classifier; ALL patterns/keywords/overrides
+  live in `src/osint/data/classification_rules.json` (learned from ~30K real
+  profiles). Edit the JSON to tune classification; run `osint scan` to get
+  suggested overrides.
+- **ai-client.ts** — optional Groq enhancement (llama-3.3-70b): company scoring,
+  title classification, and full-profile deep classification with
+  confidence-gated promotion (0.8 title-only, 0.7 deep). Never required.
+- **employees-query.ts** — Voyager GraphQL people search
+  (`voyagerSearchDashClusters.66adc6056cf4138949ca5dcb31bb1749`, 50/page);
+  `--query-id` overrides it if LinkedIn rotates it.
+- **delve.ts** — Outlook/Delve email→profile deanonymization
+  (`LINKEDIN_MS_TOKEN` or `--token-file`); circuit-breaker batch semantics.
+- **orgchart.ts / matrix.ts / stats.ts** — org chart builder, standalone HTML
+  generator, and classification analytics.
+
+Offline commands (no cookies needed): `classify --title`, `names --name`,
+`matrix`, `stats`, `scan`. The CLI uses a lazy client, so auth errors surface
+on the first real HTTP request instead of at startup.
 
 ## API Base URL
 
