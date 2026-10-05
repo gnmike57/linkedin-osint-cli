@@ -1,7 +1,7 @@
 # Shell-Style Terminal Menu with NLP — Design Spec
 
 **Date:** 2026-05-10
-**Status:** Draft for review
+**Status:** Approved (2026-05-10)
 **Feature:** Replace the palette-style interactive console with a real shell REPL that accepts exact commands and plain English (NLP), hand-rolled on `node:readline`, zero new dependencies.
 
 ---
