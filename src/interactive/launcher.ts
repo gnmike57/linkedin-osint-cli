@@ -11,7 +11,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { allCommands, createLazyClient } from '../commands/index.js';
+import { allCommands, createLazyClient } from '../commands';
 import { loadConfig, getConfigDir } from '../core/config.js';
 import { output, outputError } from '../core/output.js';
 import type { CommandDefinition } from '../core/types.js';
@@ -32,7 +32,7 @@ interface Choice<T> {
   description?: string;
 }
 
-interface Prompts {
+export interface Prompts {
   input(opts: { message: string; default?: string }): Promise<string>;
   confirm(opts: { message: string; default?: boolean }): Promise<boolean>;
   select<T>(opts: { message: string; choices: Array<Choice<T>>; pageSize?: number }): Promise<T>;
@@ -232,7 +232,7 @@ async function pickPalette(prompts: Prompts, catalog: CatalogGroup[]): Promise<P
   }
 }
 
-async function browseByCategory(
+export async function browseByCategory(
   prompts: Prompts,
   catalog: CatalogGroup[],
 ): Promise<GroupPick> {
@@ -278,8 +278,18 @@ function runSessionAction(action: SessionAction): void {
   }
 }
 
+/** True when a browse pick is one of the launcher's private sentinels. */
+export function isBrowseSentinel(value: unknown): boolean {
+  return value === EXIT || value === BACK;
+}
 
-async function executeEntry(prompts: Prompts, entry: CatalogEntry): Promise<void> {
+/** Re-exec a CLI session action (`login`, `status --verify`, `logout`, …). */
+export function execSessionAction(args: string[]): void {
+  runSessionAction({ kind: 'session', label: args.join(' '), args });
+}
+
+
+export async function executeEntry(prompts: Prompts, entry: CatalogEntry): Promise<void> {
   const cmd = entry.command;
   console.log(`\n${ARROW} ${c.bold(entry.label)}  ${c.dim(DOT)} ${c.gray(cmd.description)}`);
   if (cmd.examples?.length) {

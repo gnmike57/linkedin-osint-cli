@@ -511,6 +511,22 @@ export function extractSlots(
     if (target) {
       input[target.field] = Number(digits);
       consumed[i] = true;
+      continue;
+    }
+    // No numeric slot: keep numeric context words with their number ("limit
+    // 50" on a command without --limit) — both go to unclaimed, never leaked
+    // into keyword-style fields.
+    const contextWords = new Set([
+      ...NUMBER_CONTEXT.count, ...NUMBER_CONTEXT.limit, ...NUMBER_CONTEXT.start,
+    ]);
+    const prevIsNumericContext =
+      prev !== undefined &&
+      (contextWords.has(prev) ||
+        numericFields.some((f) => f.field.replace(/_/g, '-') === prev.replace(/_/g, '-')));
+    if (prevIsNumericContext) {
+      consumed[i - 1] = true;
+      blockedWords.push(prev!, digits);
+      consumed[i] = true;
     }
   }
 

@@ -39,8 +39,11 @@ function runScenario(lines) {
     const child = spawn(process.execPath, [entry, 'menu'], {
       stdio: ['pipe', 'pipe', 'pipe'],
       // Force the built-in console so scripted sessions are deterministic even
-      // when @inquirer/prompts is installed (real prompts need a TTY).
-      env: { ...process.env, LINKEDIN_PROMPTS: 'fallback' },
+      // when @inquirer/prompts is installed (real prompts need a TTY), and pin
+      // the classic palette UI — the shell REPL is the default console since
+      // the NLP shell landed (spec §9: smoke:menu pins LINKEDIN_UI=classic
+      // the same way it pins LINKEDIN_PROMPTS=fallback).
+      env: { ...process.env, LINKEDIN_PROMPTS: 'fallback', LINKEDIN_UI: 'classic' },
     });
     let stdout = '';
     let stderr = '';

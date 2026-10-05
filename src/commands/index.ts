@@ -4,8 +4,8 @@ import { resolveAuth } from '../core/auth.js';
 import { createClient } from '../core/client.js';
 import { output, outputError } from '../core/output.js';
 import { registerLoginCommand, registerLogoutCommand, registerStatusCommand } from './auth/login.js';
-import { registerMcpCommand } from './mcp/index.js';
-import { osintCommands } from './osint/index.js';
+import { registerMcpCommand } from './mcp';
+import { osintCommands } from './osint';
 
 // Import all command groups
 import { profileCommands } from './profile/view.js';

@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { registerAllCommands } from './commands/index.js';
+import { registerAllCommands } from './commands';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
@@ -24,19 +24,25 @@ program
 
 registerAllCommands(program);
 
-// Interactive console: bare `linkedin` on a TTY, or `linkedin menu` from anywhere.
+// Interactive shell: bare `linkedin` on a TTY, or `linkedin menu`/`shell` from anywhere.
+const runShellAction = async (): Promise<void> => {
+  const { runShell } = await import('./interactive/shell.js');
+  await runShell({ version: pkg.version });
+};
+
 program
   .command('menu')
-  .description('Interactive console — command palette, category browser, guided prompts')
-  .action(async () => {
-    const { runInteractiveMenu } = await import('./interactive/launcher.js');
-    await runInteractiveMenu({ version: pkg.version });
-  });
+  .description('Interactive shell — exact commands, plain English (NLP), or browse by category')
+  .action(runShellAction);
+
+program
+  .command('shell')
+  .description('Alias for `menu` — the interactive shell')
+  .action(runShellAction);
 
 const isBare = process.argv.slice(2).length === 0;
 if (isBare && process.stdout.isTTY && process.stdin.isTTY) {
-  const { runInteractiveMenu } = await import('./interactive/launcher.js');
-  await runInteractiveMenu({ version: pkg.version });
+  await runShellAction();
 } else if (isBare) {
   program.outputHelp();
 } else {

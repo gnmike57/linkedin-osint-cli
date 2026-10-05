@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Releases are tagged on
 `master`; each entry mirrors the corresponding GitHub release.
 
+## [Unreleased] — interactive shell with local NLP
+
+- **Shell REPL is now the default console** — bare `linkedin` on a TTY (or
+  `linkedin menu` / the new `linkedin shell` alias) opens a bash/PowerShell-style
+  prompt that accepts three input styles in one line: exact commands
+  (`search people --keywords "software engineer" --network F`), plain English
+  (`scrape all the sales guys at acme, limit 50`), and the old palette
+  (`browse [group]` / `menu`). The NLP layer is local, deterministic rules over
+  the command catalog — offline, no API key, no network. Nothing executes
+  without a confirm-first staging step showing the assembled command line;
+  write commands (posts/messaging/connections/engage mutations) show a red ⚠
+  and require an explicit `y`. Staging supports inline overrides (`count 25`,
+  `--limit 50`, enum/boolean validation), a prefilled `edit` walkthrough,
+  `raw` (print the scriptable line without executing), and `q` (cancel).
+  Tab completion covers builtins/groups/subcommands/long flags; persistent
+  history lives at `~/.linkedin-cli/history` (last 200 lines, fail-safe).
+  `LINKEDIN_UI=classic` keeps the palette-only UI; `LINKEDIN_SHELL=plain`
+  forces the non-TTY grammar that the new `smoke:shell` script drives.
+  Zero new dependencies — `node:readline` + the existing catalog/Zod/colors.
+
 ## [0.2.0] — interactive console, consolidated OSINT suite, 40-issue bug sweep
 
 Full LinkedIn platform management from the terminal — 43 platform commands

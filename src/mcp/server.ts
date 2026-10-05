@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { allCommands, createLazyClient } from '../commands/index.js';
+import { allCommands, createLazyClient } from '../commands';
 import type { CommandDefinition } from '../core/types.js';
 
 // Resolve the server version from package.json so it never drifts again.

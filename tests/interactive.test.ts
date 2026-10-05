@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PassThrough } from 'node:stream';
-import { allCommands } from '../src/commands/index.js';
+import { allCommands } from '../src/commands';
 import {
   buildCatalog,
   flagTakesValue,
@@ -10,6 +10,7 @@ import {
 } from '../src/interactive/catalog.js';
 import { bannerLines } from '../src/interactive/banner.js';
 import { createFallbackPrompts, parseSelection, resolvePromptsPreference } from '../src/interactive/readline-prompts.js';
+import { buildCompletionSource, completeLine } from '../src/interactive/completer.js';
 
 describe('interactive catalog', () => {
   const catalog = buildCatalog(allCommands);
@@ -158,6 +159,48 @@ describe('built-in fallback console (readline)', () => {
       ],
     });
     expect(picked).toBe('2');
+  });
+});
+
+describe('shell tab completer (spec §4.4)', () => {
+  const source = buildCompletionSource(buildCatalog(allCommands), [
+    'help', 'browse', 'menu', 'history', 'clear', 'status', 'login', 'logout', 'exit', 'quit',
+  ]);
+
+  it('offers builtins and groups on the first token', () => {
+    const [hits, echo] = completeLine('', source);
+    expect(hits).toContain('help');
+    expect(hits).toContain('profile');
+    expect(hits).toContain('osint');
+    expect(echo).toBe('');
+  });
+
+  it('completes group prefixes', () => {
+    expect(completeLine('prof', source)[0]).toEqual(['profile']);
+    expect(completeLine('osint c', source)).toBeDefined();
+  });
+
+  it('completes subcommands after a group', () => {
+    const [hits] = completeLine('profile ', source);
+    expect(hits).toEqual(expect.arrayContaining(['view', 'me', 'posts', 'contact-info']));
+    expect(completeLine('profile co', source)[0]).toEqual(['contact-info']);
+  });
+
+  it('completes long flags of the current command on `--`', () => {
+    const [hits] = completeLine('search people --', source);
+    expect(hits).toEqual(expect.arrayContaining(['--keywords', '--network', '--limit']));
+    expect(completeLine('search people --key', source)[0]).toEqual(['--keywords']);
+    expect(completeLine('osint employees --g', source)[0]).toEqual(['--geo', '--geoblast']);
+  });
+
+  it('completes group names after `browse`', () => {
+    expect(completeLine('browse os', source)[0]).toEqual(['osint']);
+    expect(completeLine('browse ', source)[0]).toEqual(expect.arrayContaining(['profile', 'osint']));
+  });
+
+  it('returns nothing for unknown groups or deeper tokens', () => {
+    expect(completeLine('foo ', source)[0]).toEqual([]);
+    expect(completeLine('profile view johndoe ', source)[0]).toEqual([]);
   });
 });
 
