@@ -4,12 +4,12 @@ import { saveConfig } from '../../core/config.js';
 import { createClient } from '../../core/client.js';
 import { output, outputError } from '../../core/output.js';
 import { resolveAuth, wantsFromChrome } from '../../core/auth.js';
-import { chromiumCookieStoreAvailable } from '../../core/chrome-cookies.js';
+import { chromiumCookieStoreAvailable, linkedInCookiesAreAppBound } from '../../core/chrome-cookies.js';
 import type { GlobalOptions, LinkedInAuth } from '../../core/types.js';
 
 const LINKEDIN_LOGIN_URL = 'https://www.linkedin.com/login';
-const BROWSER_LOGIN_TIMEOUT_MS = 180_000;
 const BROWSER_POLL_INTERVAL_MS = 3_000;
+const LOCAL_POLL_BUDGET_MS = 60_000;
 
 /** Open a URL in the user's default browser. Never waits for the browser. */
 export function openInBrowser(url: string): void {
@@ -27,6 +27,49 @@ export function openInBrowser(url: string): void {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Poll the local Chromium cookie store until a LinkedIn session appears.
+ * Bounded by `budgetMs` so a v20-encrypted or locked store cannot stall the
+ * flow. Returns undefined on timeout; callers should fall back to CDP capture.
+ */
+async function pollLocalCookieStore(
+  chromeProfile: string | undefined,
+  budgetMs: number,
+): Promise<LinkedInAuth | undefined> {
+  const deadline = Date.now() + budgetMs;
+  while (Date.now() < deadline) {
+    try {
+      const auth = await resolveAuth({ fromChrome: true, chromeProfile });
+      process.stderr.write('Session cookies captured from the browser.\n');
+      return auth;
+    } catch {
+      await sleep(BROWSER_POLL_INTERVAL_MS);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * CDP capture fallback: open a dedicated Chromium window (throwaway profile)
+ * and read cookies live while the user signs in. Works regardless of cookie
+ * encryption; the temporary profile is deleted afterwards.
+ */
+async function captureViaCdp(): Promise<LinkedInAuth | undefined> {
+  try {
+    const { captureLinkedInCookiesViaCdp } = await import('../../core/cdp-cookies.js');
+    const cdp = await captureLinkedInCookiesViaCdp();
+    process.stderr.write('Session cookies captured from the browser.\n');
+    return {
+      liAt: cdp.liAt,
+      jsessionid: cdp.jsessionid,
+      cookieHeader: cdp.cookieHeader,
+      cookies: cdp.cookies,
+    } as LinkedInAuth;
+  } catch {
+    return undefined;
+  }
+}
 
 function sessionInvalidReason(err: { code?: string; statusCode?: number; message?: string }): string | null {
   if (err?.code === 'AUTH_ERROR' || err?.statusCode === 401) {
@@ -60,35 +103,33 @@ export function registerLoginCommand(program: Command): void {
         let chromeAuth: LinkedInAuth | undefined;
 
         if (localOpts.browser && !(liAt && jsessionid)) {
-          // Browser-assisted login: open LinkedIn's login page, then poll the
-          // local Chromium cookie store until the session appears. LinkedIn
-          // has no consumer OAuth2, so capturing the browser session is the
-          // supported way to authenticate this CLI.
-          openInBrowser(LINKEDIN_LOGIN_URL);
-          if (chromiumCookieStoreAvailable(chromeProfile)) {
+          // Browser-assisted login: capture the session from the browser.
+          // LinkedIn has no consumer OAuth2, so capturing the browser session
+          // is the supported way to authenticate this CLI.
+          const appBound = await linkedInCookiesAreAppBound().catch(() => false);
+          if (chromiumCookieStoreAvailable(chromeProfile) && !appBound) {
+            openInBrowser(LINKEDIN_LOGIN_URL);
             process.stderr.write(
               'Opened linkedin.com/login in your default browser. ' +
                 'Sign in there and leave it open — this will capture the session automatically...\n',
             );
-            const deadline = Date.now() + BROWSER_LOGIN_TIMEOUT_MS;
-            while (Date.now() < deadline) {
-              try {
-                chromeAuth = await resolveAuth({ fromChrome: true, chromeProfile });
-                process.stderr.write('Session cookies captured from the browser.\n');
-                break;
-              } catch {
-                await sleep(BROWSER_POLL_INTERVAL_MS);
-              }
-            }
+            chromeAuth = await pollLocalCookieStore(chromeProfile, LOCAL_POLL_BUDGET_MS);
             if (!chromeAuth) {
               process.stderr.write(
-                'Timed out waiting for the browser session. Falling back to manual cookie paste.\n',
+                'The local cookie store did not yield a session. Opening a dedicated login window...\n',
               );
+              chromeAuth = await captureViaCdp();
             }
           } else {
             process.stderr.write(
-              'LinkedIn login opened in your browser. No readable Chrome/Edge profile found on this ' +
-                'machine, so paste your cookies below (DevTools → Application → Cookies → linkedin.com).\n',
+              'Your browser encrypts its cookies so other programs cannot read them. ' +
+                'Opening a dedicated login window — sign in there and your session will be captured automatically.\n',
+            );
+            chromeAuth = await captureViaCdp();
+          }
+          if (!chromeAuth) {
+            process.stderr.write(
+              'Could not capture the session automatically. Falling back to manual cookie paste.\n',
             );
           }
         }

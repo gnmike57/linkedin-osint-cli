@@ -160,9 +160,13 @@ linkedin login --browser
 
 If you use Chrome/Edge on Windows, macOS, or Linux with the Default profile,
 that's the whole flow — sign in in the browser window and the CLI picks it up
-automatically. If no readable Chromium profile is found (Firefox/Safari users,
-custom profiles, no local browser), the command falls back to the manual paste
-prompt in Option C.
+automatically. If your browser encrypts its cookies so other programs cannot
+read them (`v11`/`v20` app-bound encryption, the default on current
+Chrome/Edge on Windows), the CLI opens a dedicated login window instead and
+captures the session live over the DevTools Protocol — sign in there and the
+cookies are captured automatically; the temporary browser profile is deleted
+afterwards. If no readable Chromium binary exists (Firefox/Safari users,
+custom setups), the command falls back to the manual paste prompt in Option C.
 
 The interactive shell (`linkedin` with no args) routes `login` here, and the
 Session menu lists it first as **login via browser (recommended)**.
@@ -192,8 +196,8 @@ Environment equivalents: `LINKEDIN_FROM_CHROME=1`, `LINKEDIN_CHROME_PROFILE=Defa
 On Windows the master key is unlocked with DPAPI (via PowerShell) from the
 browser's `Local State`; `v10` cookies decrypt with AES-256-GCM. `v11`/`v20`
 app-bound encrypted cookies (Chrome 127+ app-bound rollout) cannot be decrypted
-from another process and are skipped — use `linkedin login --browser`'s paste
-fallback if your account hits this.
+from another process and are skipped — `linkedin login --browser` detects this
+and captures the session over the DevTools Protocol instead (see Option A).
 
 Cookie values are never printed to stdout/stderr.
 

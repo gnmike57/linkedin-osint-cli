@@ -101,6 +101,37 @@ export function chromiumCookieStoreAvailable(profile = 'Default'): boolean {
   }
 }
 
+/**
+ * Chrome holds the cookie DB with an exclusive lock on Windows while the
+ * browser is running; the lock is released in short windows around commits,
+ * so retry briefly before giving up.
+ */
+function copyOrRetry(src: string, dest: string): void {
+  const isBusy = (err: unknown) => (err as NodeJS.ErrnoException)?.code === 'EBUSY';
+  try {
+    copyFileSync(src, dest);
+    return;
+  } catch (err) {
+    if (!isBusy(err)) throw err;
+  }
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const waitStart = Date.now();
+    while (Date.now() - waitStart < 250) {
+      /* short spin; the browser releases the lock around commits */
+    }
+    try {
+      copyFileSync(src, dest);
+      return;
+    } catch (err) {
+      if (!isBusy(err)) throw err;
+    }
+  }
+  throw new Error(
+    'The browser cookie database is locked by the running browser. ' +
+      'Close the browser or run login without --from-chrome to paste cookies manually.',
+  );
+}
+
 function getMacChromeSafeStoragePassword(): string {
   const result = spawnSync(
     'security',
@@ -188,17 +219,21 @@ export function decryptChromeCookieValue(encrypted: Buffer, key: Buffer): string
   if (encrypted.length === 0) return '';
   const prefix = encrypted.subarray(0, 3).toString('utf8');
 
-  if (prefix !== 'v10' && prefix !== 'v11') {
+  if (prefix !== 'v10' && prefix !== 'v11' && prefix !== 'v20') {
     // Legacy unencrypted cookie — return raw bytes as utf8.
     return encrypted.toString('utf8');
   }
 
   if (key.length === 32) {
     // Windows Chromium (v10): AES-256-GCM with a 12-byte nonce after the
-    // prefix. v11 is app-bound encrypted (Chrome 127+); its key can't be
-    // derived from Local State, so we refuse rather than return garbage.
+    // prefix. v11/v20 are app-bound encrypted (Chrome/Edge 127+); their keys
+    // can't be derived from Local State, so we refuse rather than return
+    // garbage.
     if (prefix !== 'v10') {
-      throw new Error(`Unsupported encrypted cookie format "${prefix}" for a 32-byte key.`);
+      throw new Error(
+        `Unsupported encrypted cookie format "${prefix}" for a 32-byte key ` +
+          `(app-bound encryption; only readable by the browser itself).`,
+      );
     }
     const nonce = encrypted.subarray(3, 15);
     const ciphertext = encrypted.subarray(15);
@@ -275,6 +310,77 @@ async function querySqlite(dbPath: string): Promise<string> {
   }
 }
 
+const APP_BOUND_PROBE_QUERY =
+  `SELECT name, hex(encrypted_value) AS enc FROM cookies ` +
+  `WHERE host_key = 'linkedin.com' OR host_key LIKE '%.linkedin.com';`;
+
+/**
+ * True when a LinkedIn session exists in a Chromium cookie store but its
+ * `li_at` cookie is app-bound encrypted (v11/v20) — unreadable from another
+ * process. Detected so `login --browser` can go straight to CDP capture
+ * instead of polling a store that can never yield the session.
+ */
+export async function linkedInCookiesAreAppBound(): Promise<boolean> {
+  const cookieRows = async (dbPath: string): Promise<Array<{ name: string; enc: string }>> => {
+    try {
+      const { DatabaseSync } = await import('node:sqlite');
+      const db = new DatabaseSync(dbPath);
+      try {
+        return db.prepare(APP_BOUND_PROBE_QUERY).all() as Array<{ name: string; enc: string }>;
+      } finally {
+        db.close();
+      }
+    } catch {
+      return execFileSync('sqlite3', ['-separator', '\t', dbPath, APP_BOUND_PROBE_QUERY], {
+        encoding: 'utf8',
+      })
+        .split('\n')
+        .filter((l) => l.trim())
+        .map((l) => {
+          const [name, enc] = l.split('\t');
+          return { name, enc };
+        });
+    }
+  };
+
+  let sawAppBoundLiAt = false;
+  for (const userDataDir of chromeUserDataDirs()) {
+    if (!existsSync(userDataDir)) continue;
+    for (const profile of ['Default', 'Profile 1', 'Profile 2', 'Profile 3']) {
+      const dbPath = join(userDataDir, profile, 'Network', 'Cookies');
+      if (!existsSync(dbPath)) continue;
+      const tmpDir = mkdtempSync(join(tmpdir(), 'linkedin-cli-probe-'));
+      const tmpDb = join(tmpDir, 'Cookies');
+      try {
+        copyFileSync(dbPath, tmpDb);
+        for (const suffix of ['-wal', '-shm']) {
+          const sidecar = `${dbPath}${suffix}`;
+          if (existsSync(sidecar)) copyFileSync(sidecar, `${tmpDb}${suffix}`);
+        }
+        for (const row of await cookieRows(tmpDb)) {
+          // `enc` is hex; the encryption version tag is the first 3 bytes.
+          const version = Buffer.from((row.enc ?? '').slice(0, 6), 'hex').toString('latin1');
+          if (row.name === 'li_at' && (version === 'v11' || version === 'v20')) {
+            sawAppBoundLiAt = true;
+          }
+          if (row.name === 'li_at' && version === 'v10') {
+            return false; // a decryptable session exists — normal polling can win
+          }
+        }
+      } catch {
+        /* locked or unreadable profile — skip */
+      } finally {
+        try {
+          rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+  return sawAppBoundLiAt;
+}
+
 export async function loadLinkedInCookiesFromChrome(
   profile = 'Default',
 ): Promise<ChromeCookieResult> {
@@ -287,7 +393,7 @@ export async function loadLinkedInCookiesFromChrome(
 
   let rows: string;
   try {
-    copyFileSync(dbPath, tmpDb);
+    copyOrRetry(dbPath, tmpDb);
     for (const suffix of ['-wal', '-shm']) {
       const sidecar = `${dbPath}${suffix}`;
       if (existsSync(sidecar)) copyFileSync(sidecar, `${tmpDb}${suffix}`);

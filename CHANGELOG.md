@@ -8,14 +8,20 @@ All notable changes to this project are documented here. Releases are tagged on
 - **Browser-assisted login (`linkedin login --browser`)** — opens
   `linkedin.com/login` in the default browser and captures the session from the
   local Chromium cookie store (LinkedIn has no consumer OAuth2 for personal
-  sessions). Falls back to the manual cookie-paste prompt when no readable
-  Chromium profile exists. The shell's `login` builtin and Session menu route
-  here first.
+  sessions). When the browser's cookies are app-bound encrypted (`v11`/`v20`,
+  the default on current Chrome/Edge on Windows) or the local store cannot
+  yield the session, the CLI opens a dedicated login window with a throwaway
+  profile and captures cookies live over the DevTools Protocol; the temporary
+  profile is deleted afterwards. Falls back to the manual cookie-paste prompt
+  when no Chromium binary is available. The shell's `login` builtin and Session
+  menu route here first.
 - **Windows/Edge cookie import (`--from-chrome`)** — DPAPI-unlocked master key
   from the browser's `Local State` (via PowerShell) + AES-256-GCM decryption of
-  `v10` cookies; `v11`/`v20` app-bound cookies are skipped with clear guidance.
-  SQLite access uses the `sqlite3` CLI when present and Node's built-in
-  `node:sqlite` otherwise, so no extra install is needed on Windows.
+  `v10` cookies; `v11`/`v20` app-bound cookies are detected and routed to the
+  DevTools Protocol capture above. SQLite access uses the `sqlite3` CLI when
+  present and Node's built-in `node:sqlite` otherwise, so no extra install is
+  needed on Windows. Cookie-database copies retry briefly when the browser
+  holds the file locked.
 
 - **Shell REPL is now the default console** — bare `linkedin` on a TTY (or
   `linkedin menu` / the new `linkedin shell` alias) opens a bash/PowerShell-style
