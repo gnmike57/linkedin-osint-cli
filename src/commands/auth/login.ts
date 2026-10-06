@@ -1,9 +1,32 @@
+import { spawn } from 'node:child_process';
 import { Command } from 'commander';
 import { saveConfig } from '../../core/config.js';
 import { createClient } from '../../core/client.js';
 import { output, outputError } from '../../core/output.js';
 import { resolveAuth, wantsFromChrome } from '../../core/auth.js';
+import { chromiumCookieStoreAvailable } from '../../core/chrome-cookies.js';
 import type { GlobalOptions, LinkedInAuth } from '../../core/types.js';
+
+const LINKEDIN_LOGIN_URL = 'https://www.linkedin.com/login';
+const BROWSER_LOGIN_TIMEOUT_MS = 180_000;
+const BROWSER_POLL_INTERVAL_MS = 3_000;
+
+/** Open a URL in the user's default browser. Never waits for the browser. */
+export function openInBrowser(url: string): void {
+  const cmd =
+    process.platform === 'win32'
+      ? { bin: 'cmd', args: ['/c', 'start', '', url] }
+      : process.platform === 'darwin'
+        ? { bin: 'open', args: [url] }
+        : { bin: 'xdg-open', args: [url] };
+  const child = spawn(cmd.bin, cmd.args, { stdio: 'ignore', detached: true });
+  child.on('error', () => {
+    /* swallowed: the fallback cookie-paste flow still works */
+  });
+  child.unref();
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function sessionInvalidReason(err: { code?: string; statusCode?: number; message?: string }): string | null {
   if (err?.code === 'AUTH_ERROR' || err?.statusCode === 401) {
@@ -21,8 +44,9 @@ export function registerLoginCommand(program: Command): void {
     .description('Store your LinkedIn session cookies (li_at + JSESSIONID) for CLI use')
     .option('--li-at <cookie>', 'li_at cookie value (from browser DevTools)')
     .option('--jsessionid <cookie>', 'JSESSIONID cookie value (from browser DevTools)')
-    .option('--from-chrome', 'Read cookies from a Chrome profile on this local machine (macOS/Linux)')
+    .option('--from-chrome', 'Read cookies from a Chrome/Edge profile on this local machine')
     .option('--chrome-profile <name>', 'Chrome profile directory name (default: Default)')
+    .option('--browser', 'Open LinkedIn login in your default browser and capture the session automatically')
     .option('--skip-validation', 'Save cookies without verifying them against LinkedIn')
     .action(async function (this: Command) {
       const localOpts = this.opts() as Record<string, string | boolean | undefined>;
@@ -32,23 +56,63 @@ export function registerLoginCommand(program: Command): void {
         let liAt = (localOpts.liAt ?? globalOpts.liAt) as string | undefined;
         let jsessionid = (localOpts.jsessionid ?? globalOpts.jsessionid) as string | undefined;
         const skipValidation = localOpts.skipValidation as boolean | undefined;
-        const fromChrome = wantsFromChrome({
-          fromChrome: Boolean(localOpts.fromChrome ?? globalOpts.fromChrome),
-          chromeProfile: (localOpts.chromeProfile ?? globalOpts.chromeProfile) as string | undefined,
-        });
+        const chromeProfile = (localOpts.chromeProfile ?? globalOpts.chromeProfile) as string | undefined;
         let chromeAuth: LinkedInAuth | undefined;
 
-        if (fromChrome) {
-          chromeAuth = await resolveAuth({
-            fromChrome: true,
-            chromeProfile: (localOpts.chromeProfile ?? globalOpts.chromeProfile) as string | undefined,
-          });
+        if (localOpts.browser && !(liAt && jsessionid)) {
+          // Browser-assisted login: open LinkedIn's login page, then poll the
+          // local Chromium cookie store until the session appears. LinkedIn
+          // has no consumer OAuth2, so capturing the browser session is the
+          // supported way to authenticate this CLI.
+          openInBrowser(LINKEDIN_LOGIN_URL);
+          if (chromiumCookieStoreAvailable(chromeProfile)) {
+            process.stderr.write(
+              'Opened linkedin.com/login in your default browser. ' +
+                'Sign in there and leave it open — this will capture the session automatically...\n',
+            );
+            const deadline = Date.now() + BROWSER_LOGIN_TIMEOUT_MS;
+            while (Date.now() < deadline) {
+              try {
+                chromeAuth = await resolveAuth({ fromChrome: true, chromeProfile });
+                process.stderr.write('Session cookies captured from the browser.\n');
+                break;
+              } catch {
+                await sleep(BROWSER_POLL_INTERVAL_MS);
+              }
+            }
+            if (!chromeAuth) {
+              process.stderr.write(
+                'Timed out waiting for the browser session. Falling back to manual cookie paste.\n',
+              );
+            }
+          } else {
+            process.stderr.write(
+              'LinkedIn login opened in your browser. No readable Chrome/Edge profile found on this ' +
+                'machine, so paste your cookies below (DevTools → Application → Cookies → linkedin.com).\n',
+            );
+          }
+        }
+
+        if (chromeAuth) {
+          liAt = chromeAuth.liAt;
+          jsessionid = chromeAuth.jsessionid;
+        } else if (
+          wantsFromChrome({
+            fromChrome: Boolean(localOpts.fromChrome ?? globalOpts.fromChrome),
+            chromeProfile,
+          })
+        ) {
+          // Strict --from-chrome (no browser fallback): read once, throw on failure.
+          chromeAuth = await resolveAuth({ fromChrome: true, chromeProfile });
           liAt = chromeAuth.liAt;
           jsessionid = chromeAuth.jsessionid;
         }
+        // --browser with a failed capture falls through to the paste prompt.
+        const strictChrome = Boolean(localOpts.fromChrome ?? globalOpts.fromChrome);
 
-        // Interactive mode if cookies not provided as flags and not reading Chrome
-        if (!fromChrome && (!liAt || !jsessionid)) {
+        // Interactive mode if cookies not provided as flags and not reading Chrome.
+        // --browser that failed to capture falls through to this paste prompt.
+        if ((!strictChrome && !chromeAuth) && (!liAt || !jsessionid)) {
           const { password: promptPassword } = await import('@inquirer/prompts');
 
           if (!liAt) {
@@ -99,7 +163,7 @@ export function registerLoginCommand(program: Command): void {
             });
 
             output({
-              message: fromChrome
+              message: chromeAuth
                 ? 'Login successful (cookies imported from Chrome)'
                 : 'Login successful',
               profile: profileName,

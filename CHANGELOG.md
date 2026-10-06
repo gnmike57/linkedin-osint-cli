@@ -5,6 +5,18 @@ All notable changes to this project are documented here. Releases are tagged on
 
 ## [Unreleased] — interactive shell with local NLP
 
+- **Browser-assisted login (`linkedin login --browser`)** — opens
+  `linkedin.com/login` in the default browser and captures the session from the
+  local Chromium cookie store (LinkedIn has no consumer OAuth2 for personal
+  sessions). Falls back to the manual cookie-paste prompt when no readable
+  Chromium profile exists. The shell's `login` builtin and Session menu route
+  here first.
+- **Windows/Edge cookie import (`--from-chrome`)** — DPAPI-unlocked master key
+  from the browser's `Local State` (via PowerShell) + AES-256-GCM decryption of
+  `v10` cookies; `v11`/`v20` app-bound cookies are skipped with clear guidance.
+  SQLite access uses the `sqlite3` CLI when present and Node's built-in
+  `node:sqlite` otherwise, so no extra install is needed on Windows.
+
 - **Shell REPL is now the default console** — bare `linkedin` on a TTY (or
   `linkedin menu` / the new `linkedin shell` alias) opens a bash/PowerShell-style
   prompt that accepts three input styles in one line: exact commands

@@ -147,13 +147,37 @@ launches. Both paths are exercised by `npm run smoke:menu` (build first), which
 drives a full session through the palette and asserts the selected command
 actually runs.
 
-### Option A — Read cookies from Chrome (local macOS/Linux only)
+### Option A — Login via browser (recommended)
 
-If you are already logged into LinkedIn in Chrome **on this machine**, the CLI can decrypt cookies from the local profile. This sends the full cookie jar (not just `li_at` + `JSESSIONID`), which matches a real browser more closely. Local-only — do not point this at a remote Chrome profile or run it from a cloud agent.
+LinkedIn has no consumer OAuth2 for personal sessions, so the CLI captures your
+browser session instead. `--browser` opens `linkedin.com/login` in your default
+browser, then polls the local Chromium cookie store until the session appears
+(up to 3 minutes) and saves it:
+
+```bash
+linkedin login --browser
+```
+
+If you use Chrome/Edge on Windows, macOS, or Linux with the Default profile,
+that's the whole flow — sign in in the browser window and the CLI picks it up
+automatically. If no readable Chromium profile is found (Firefox/Safari users,
+custom profiles, no local browser), the command falls back to the manual paste
+prompt in Option C.
+
+The interactive shell (`linkedin` with no args) routes `login` here, and the
+Session menu lists it first as **login via browser (recommended)**.
+
+### Option B — Read cookies from Chrome/Edge (local only)
+
+If you are already logged into LinkedIn in Chrome or Edge **on this machine**,
+the CLI can decrypt cookies from the local profile. This sends the full cookie
+jar (not just `li_at` + `JSESSIONID`), which matches a real browser more
+closely. Local-only — do not point this at a remote Chrome profile or run it
+from a cloud agent.
 
 ```bash
 # macOS will prompt to unlock Keychain ("Chrome Safe Storage") the first time.
-# Requires the `sqlite3` CLI (preinstalled on macOS; `sudo apt install sqlite3` on Linux).
+# macOS/Linux use the `sqlite3` CLI; Windows uses Node's built-in SQLite.
 linkedin --from-chrome profile me --pretty
 
 # Or persist the two auth tokens into ~/.linkedin-cli/config.json
@@ -165,11 +189,15 @@ linkedin --from-chrome --chrome-profile "Profile 1" status --verify
 
 Environment equivalents: `LINKEDIN_FROM_CHROME=1`, `LINKEDIN_CHROME_PROFILE=Default`. Optional: `LINKEDIN_CHROME_USER_DATA_DIR` to point at a custom user-data directory (Chrome/Chromium).
 
-Windows is not supported for `--from-chrome` (Chrome 127+ App-Bound Encryption).
+On Windows the master key is unlocked with DPAPI (via PowerShell) from the
+browser's `Local State`; `v10` cookies decrypt with AES-256-GCM. `v11`/`v20`
+app-bound encrypted cookies (Chrome 127+ app-bound rollout) cannot be decrypted
+from another process and are skipped — use `linkedin login --browser`'s paste
+fallback if your account hits this.
 
 Cookie values are never printed to stdout/stderr.
 
-### Option B — Paste cookies manually
+### Option C — Paste cookies manually
 
 Open LinkedIn in your browser → DevTools (`F12`) → Application → Cookies → `linkedin.com`
 
@@ -325,7 +353,7 @@ Every command supports these flags:
 |------|-------------|
 | `--li-at <cookie>` | Override li_at cookie |
 | `--jsessionid <cookie>` | Override JSESSIONID cookie |
-| `--from-chrome` | Read cookies from a Chrome profile on this local machine |
+| `--from-chrome` | Read cookies from a Chrome/Edge profile on this local machine |
 | `--chrome-profile <name>` | Chrome profile directory (default: `Default`) |
 | `--output pretty` | Pretty-printed JSON |
 | `--pretty` | Shorthand for `--output pretty` |

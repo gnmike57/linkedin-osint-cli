@@ -50,7 +50,8 @@ type SessionAction = { kind: 'session'; label: string; args: string[] };
 type Pick = CatalogEntry | SessionAction | typeof EXIT;
 
 const SESSION_ITEMS: SessionAction[] = [
-  { kind: 'session', label: '🔐  Session › login (save cookies)', args: ['login'] },
+  { kind: 'session', label: '🔐  Session › login via browser (recommended)', args: ['login', '--browser'] },
+  { kind: 'session', label: '🔐  Session › login (paste cookies)', args: ['login'] },
   { kind: 'session', label: '🔐  Session › login via Chrome import', args: ['login', '--from-chrome'] },
   { kind: 'session', label: '✅  Session › status --verify', args: ['status', '--verify'] },
   { kind: 'session', label: '👋  Session › logout (delete stored cookies)', args: ['logout'] },

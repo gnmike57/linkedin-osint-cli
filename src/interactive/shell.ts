@@ -192,7 +192,7 @@ async function handleBuiltin(session: ShellSession, name: string, rest: Token[])
       session.execSession(['status', '--verify']);
       return 'continue';
     case 'login':
-      session.execSession(['login']);
+      session.execSession(['login', '--browser']);
       return 'continue';
     case 'logout':
       session.execSession(['logout']);

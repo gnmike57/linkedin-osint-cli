@@ -23,11 +23,13 @@ LINKEDIN_FROM_CHROME=1                  # read cookies from a local Chrome profi
 LINKEDIN_CHROME_PROFILE=Default         # Chrome profile directory name
 ```
 
-CLI equivalents: `--from-chrome`, `--chrome-profile <name>`. These read the local Chrome profile and must not be used from a remote runner.
+CLI equivalents: `--from-chrome`, `--chrome-profile <name>`. These read the local Chrome/Edge profile and must not be used from a remote runner.
 
-To check if the session is valid (local harness):
+Local harness login and session checks:
 ```bash
-linkedin status --verify
+linkedin login --browser    # open LinkedIn in your browser and capture the session automatically
+linkedin login              # paste li_at + JSESSIONID manually
+linkedin status --verify    # check if the session is valid
 ```
 
 ---
