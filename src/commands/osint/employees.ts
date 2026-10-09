@@ -10,6 +10,7 @@
 import { z } from 'zod';
 import type { CommandDefinition } from '../../core/types.js';
 import { LinkedInError } from '../../core/errors.js';
+import { loadConfig } from '../../core/config.js';
 import {
   buildEmployeesVariables,
   parseEmployeesPayload,
@@ -132,6 +133,16 @@ export const osintEmployeesCommand: CommandDefinition = {
     let scrapeError: string | undefined;
     const depth = inputAny.depth ?? defaultDepth(staffCount);
 
+    // Resolve the people-search queryId. LinkedIn rotates it on every deploy and
+    // it cannot be read off the search page (verified: the SRP HTML carries no
+    // queryId, the JS bundles only reference `voyagerSearchDashSearchHome`, and
+    // the legacy REST search endpoints are gone), so the only live source is the
+    // browser extension — it records the hash from LinkedIn's own GraphQL call
+    // and forwards it with the session. Prefer an explicit --query-id, then the
+    // captured value, then the bundled default.
+    const cfg = await loadConfig().catch(() => null);
+    const effectiveQueryId = inputAny.query_id ?? cfg?.query_id ?? EMPLOYEES_QUERY_ID;
+
     for (const loop of outerLoops) {
       let pagesUsed = 0;
       let stopped = 'depth';
@@ -153,7 +164,7 @@ export const osintEmployeesCommand: CommandDefinition = {
           try {
             data = await client.get<unknown>('/graphql', {
               variables,
-              queryId: inputAny.query_id ?? EMPLOYEES_QUERY_ID,
+              queryId: effectiveQueryId,
             });
           } catch (err) {
             const status = (err as { statusCode?: number }).statusCode;
@@ -208,6 +219,17 @@ export const osintEmployeesCommand: CommandDefinition = {
       loopResults.push({ label: loop.label, pages: pagesUsed, found: employeesMap.size, stopped });
       if (stopped === 'UPSELL_LIMIT' || stopped === 'max_profiles' || stopped === 'error') break;
       if (outerLoops.length === 1 && stopped !== 'depth') break;
+    }
+
+    // A rotated queryId makes every page 400 while the command still exits 0
+    // with an empty list — which is exactly how this failure stayed invisible.
+    // Surface it with the fix instead of reporting a silent "0 employees".
+    if (employeesMap.size === 0 && loopResults.some((l) => l.stopped === 'HTTP 400')) {
+      scrapeError =
+        `People search rejected queryId ${effectiveQueryId} with HTTP 400 — LinkedIn has ` +
+        'rotated it. Run `linkedin extension listen` and reload the browser extension ' +
+        '(it re-learns the hash automatically), or pass the current one via --query-id.';
+      process.stderr.write(`\n[osint employees] ${scrapeError}\n\n`);
     }
 
     // --- Outputs ---
@@ -267,6 +289,7 @@ export const osintEmployeesCommand: CommandDefinition = {
       staff_count: staffCount || undefined,
       total: employees.length,
       upsell_limit: upsellHit || undefined,
+      query_id: effectiveQueryId,
       error: scrapeError,
       loops: loopResults,
       files,

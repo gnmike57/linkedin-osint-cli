@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import type { CommandDefinition, GlobalOptions, LinkedInClient } from '../core/types.js';
-import { resolveAuth } from '../core/auth.js';
+import { resolveAuth, refreshSessionFromBrowser } from '../core/auth.js';
 import { createClient } from '../core/client.js';
 import { output, outputError } from '../core/output.js';
 import { registerLoginCommand, registerLogoutCommand, registerStatusCommand } from './auth/login.js';
@@ -18,6 +18,7 @@ import { searchCommands } from './search/search.js';
 import { companiesCommands } from './companies/companies.js';
 import { jobsCommands } from './jobs/jobs.js';
 import { analyticsCommands } from './analytics/analytics.js';
+import { extensionCommands } from './extension/index.js';
 
 export const allCommands: CommandDefinition[] = [
   ...profileCommands,
@@ -31,6 +32,7 @@ export const allCommands: CommandDefinition[] = [
   ...jobsCommands,
   ...analyticsCommands,
   ...osintCommands,
+  ...extensionCommands,
 ];
 
 export function registerAllCommands(program: Command): void {
@@ -80,7 +82,8 @@ export function createLazyClient(authFlags: {
   let clientPromise: Promise<LinkedInClient> | null = null;
   const getClient = async (): Promise<LinkedInClient> => {
     if (!clientPromise) {
-      clientPromise = (async () => createClient(await resolveAuth(authFlags)))();
+      clientPromise = (async () =>
+        createClient(await resolveAuth(authFlags), { refresh: refreshSessionFromBrowser }))();
     }
     return clientPromise;
   };

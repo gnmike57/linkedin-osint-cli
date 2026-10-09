@@ -35,13 +35,72 @@ export function generateTrackingId(): string {
   return Buffer.from(bytes).toString('base64');
 }
 
-export function createClient(auth: LinkedInAuth): LinkedInClient {
-  const csrfToken = auth.jsessionid.replace(/"/g, '');
+/** Optional behaviour for {@link createClient}. */
+export interface ClientOptions {
+  /**
+   * Re-resolve the session on a mid-run auth failure and retry once, so the
+   * caller transparently recovers from an expired token instead of seeing a raw
+   * 401. The CLI passes a browser-profile refresh here.
+   */
+  refresh?: () => Promise<LinkedInAuth | null>;
+}
 
-  const cookieHeader =
-    auth.cookieHeader && auth.cookieHeader.includes('li_at=')
-      ? auth.cookieHeader
-      : `JSESSIONID="${csrfToken}"; li_at=${auth.liAt}`;
+/**
+ * True when a stored Cookie header belongs to the given session.
+ *
+ * A full jar **wins over** `li_at`/`JSESSIONID` when building request headers
+ * (LinkedIn ignores the thin pair when a jar is present, because it invalidates
+ * sessions that send only the two auth cookies). So a jar captured for an
+ * earlier session silently keeps the CLI on the OLD credentials, no matter how
+ * fresh `li_at` is. Matching the two identity cookies is what makes that
+ * impossible regardless of what is on disk.
+ *
+ * Returns true when the jar carries neither cookie — there is nothing to
+ * contradict, and callers require a `li_at=` in the jar before using it.
+ */
+export function jarBelongsToSession(
+  cookieHeader: string,
+  liAt: string,
+  jsessionid: string,
+): boolean {
+  const cookieValue = (name: string): string | undefined => {
+    const match = new RegExp(`(?:^|;\\s*)${name}=([^;]*)`).exec(cookieHeader);
+    return match ? match[1].trim().replace(/^"|"$/g, '') : undefined;
+  };
+  const strip = (value: string): string => value.trim().replace(/^"|"$/g, '');
+
+  const jarLiAt = cookieValue('li_at');
+  if (jarLiAt !== undefined && jarLiAt !== liAt) return false;
+
+  const jarJsessionid = cookieValue('JSESSIONID');
+  if (jarJsessionid !== undefined && jarJsessionid !== strip(jsessionid)) return false;
+
+  return true;
+}
+
+/** Warn at most once per process about a stale jar (not per request). */
+let warnedStaleJar = false;
+
+/** Build the cookie header for a given auth (replays the full jar when valid). */
+function cookieHeaderFor(csrfToken: string, auth: LinkedInAuth): string {
+  const jar = auth.cookieHeader;
+  if (jar && jar.includes('li_at=')) {
+    if (jarBelongsToSession(jar, auth.liAt, csrfToken)) return jar;
+    if (!warnedStaleJar) {
+      warnedStaleJar = true;
+      process.stderr.write(
+        '[auth] the stored cookie jar belongs to a different session than the ' +
+          'configured li_at/JSESSIONID — ignoring the jar so the fresh ' +
+          'credentials are used. Re-run `linkedin login` to refresh it.\n',
+      );
+    }
+  }
+  return `JSESSIONID="${csrfToken}"; li_at=${auth.liAt}`;
+}
+
+export function createClient(auth: LinkedInAuth, clientOptions?: ClientOptions): LinkedInClient {
+  let csrfToken = auth.jsessionid.replace(/"/g, '');
+  let cookieHeader = cookieHeaderFor(csrfToken, auth);
 
   const baseHeaders: Record<string, string> = {
     'csrf-token': csrfToken,
@@ -107,6 +166,7 @@ export function createClient(auth: LinkedInAuth): LinkedInClient {
     }
 
     let lastError: Error | undefined;
+    let refreshed = false;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
@@ -197,6 +257,21 @@ export function createClient(auth: LinkedInAuth): LinkedInClient {
             throw new LinkedInError(errorMessage, 'API_ERROR', response.status);
         }
       } catch (error) {
+        // Auth failure: transparently re-capture the session once, then retry
+        // so the caller never sees a raw 401. No-ops when no refresh is wired.
+        if (error instanceof AuthError && clientOptions?.refresh && !refreshed) {
+          refreshed = true;
+          const next = await clientOptions.refresh().catch(() => null);
+          if (next) {
+            csrfToken = next.jsessionid.replace(/"/g, '');
+            cookieHeader = cookieHeaderFor(csrfToken, next);
+            baseHeaders.cookie = cookieHeader;
+            baseHeaders['csrf-token'] = csrfToken;
+            headers.cookie = cookieHeader;
+            headers['csrf-token'] = csrfToken;
+            continue;
+          }
+        }
         // Non-retryable errors: bail immediately
         if (
           error instanceof LinkedInError &&

@@ -11,3 +11,19 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 .coverage
+
+# Local run scratch (never commit operator data/logs)
+.tmp/
+emails.txt
+err.txt
+out.txt
+
+# Agent/IDE tooling state (not part of the project)
+.commandcode/
+
+# Operator scratch: local run logs / dev artifacts (never commit — these can
+# contain session traces or personal OSINT data)
+*.log
+temp.txt
+setup_eslint.bat
+diag-cookies.mjs

@@ -315,10 +315,11 @@ const APP_BOUND_PROBE_QUERY =
   `WHERE host_key = 'linkedin.com' OR host_key LIKE '%.linkedin.com';`;
 
 /**
- * True when a LinkedIn session exists in a Chromium cookie store but its
- * `li_at` cookie is app-bound encrypted (v11/v20) — unreadable from another
- * process. Detected so `login --browser` can go straight to CDP capture
- * instead of polling a store that can never yield the session.
+ * True when this machine's Chromium cookie store encrypts LinkedIn cookies
+ * app-bound (v11/v20) — unreadable from another process. Detected from any
+ * LinkedIn cookie found app-bound (not just `li_at`, which may not exist yet
+ * before login), so `login --browser` can go straight to CDP capture instead
+ * of polling a store that can never yield the session.
  */
 export async function linkedInCookiesAreAppBound(): Promise<boolean> {
   const cookieRows = async (dbPath: string): Promise<Array<{ name: string; enc: string }>> => {
@@ -344,6 +345,7 @@ export async function linkedInCookiesAreAppBound(): Promise<boolean> {
   };
 
   let sawAppBoundLiAt = false;
+  let sawAppBoundLinkedInCookie = false;
   for (const userDataDir of chromeUserDataDirs()) {
     if (!existsSync(userDataDir)) continue;
     for (const profile of ['Default', 'Profile 1', 'Profile 2', 'Profile 3']) {
@@ -366,6 +368,13 @@ export async function linkedInCookiesAreAppBound(): Promise<boolean> {
           if (row.name === 'li_at' && version === 'v10') {
             return false; // a decryptable session exists — normal polling can win
           }
+          // Any other LinkedIn cookie stored app-bound means this browser
+          // encrypts its LinkedIn cookies outside other processes' reach —
+          // even if `li_at` hasn't been written yet (pre-login state), the
+          // future `li_at` will be encrypted the same way. Route to CDP.
+          if (version === 'v11' || version === 'v20') {
+            sawAppBoundLinkedInCookie = true;
+          }
         }
       } catch {
         /* locked or unreadable profile — skip */
@@ -378,7 +387,7 @@ export async function linkedInCookiesAreAppBound(): Promise<boolean> {
       }
     }
   }
-  return sawAppBoundLiAt;
+  return sawAppBoundLiAt || sawAppBoundLinkedInCookie;
 }
 
 export async function loadLinkedInCookiesFromChrome(

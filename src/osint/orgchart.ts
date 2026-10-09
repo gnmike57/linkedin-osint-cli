@@ -16,7 +16,6 @@ import { readFile } from 'node:fs/promises';
 import { parseCsvObjects } from './csv.js';
 import {
   classifyTitle,
-  cleanTitle,
   getHierarchyOrder,
   getDivisionNames,
   HIERARCHY_LEVELS,
@@ -184,7 +183,6 @@ export function dedupeByName(profiles: Person[]): Person[] {
  */
 export function buildHierarchicalData(
   profiles: Person[],
-  options: { useAi?: boolean } = {},
 ): Array<Record<string, unknown>> {
   const allDivisions = [...getDivisionNames(), 'General'];
   const hierarchyOrder = getHierarchyOrder();

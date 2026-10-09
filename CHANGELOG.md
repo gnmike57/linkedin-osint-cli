@@ -5,23 +5,104 @@ All notable changes to this project are documented here. Releases are tagged on
 
 ## [Unreleased] — interactive shell with local NLP
 
-- **Browser-assisted login (`linkedin login --browser`)** — opens
-  `linkedin.com/login` in the default browser and captures the session from the
-  local Chromium cookie store (LinkedIn has no consumer OAuth2 for personal
-  sessions). When the browser's cookies are app-bound encrypted (`v11`/`v20`,
-  the default on current Chrome/Edge on Windows) or the local store cannot
-  yield the session, the CLI opens a dedicated login window with a throwaway
-  profile and captures cookies live over the DevTools Protocol; the temporary
-  profile is deleted afterwards. Falls back to the manual cookie-paste prompt
-  when no Chromium binary is available. The shell's `login` builtin and Session
-  menu route here first.
+- **Always-on extension bridge (`linkedin extension listen`)** — a long-running
+  localhost listener (default `127.0.0.1:8787`) that accepts a session at *any*
+  moment and persists each capture to `~/.linkedin-cli/config.json`. This fixes
+  the recurring *"CLI not listening on 127.0.0.1:8787"* failure: the extension's
+  button used to only work while `linkedin login --extension` happened to be
+  running. Stops on Ctrl+C, `--seconds`, or `--once`; `--dry-run` observes
+  without writing config. Each capture is **merged** into the stored config (a
+  bare overwrite on a ~60 s cadence would erase `profile_name`/`profile_urn` and
+  a previously learned `query_id`), and the listener accepts only
+  `application/json`, so a random web page cannot blind-POST a forged session to
+  `127.0.0.1:8787`.
+- **Extension auto-send loop** — the MV3 service worker now pushes its live
+  session + captured `queryId` on a repeating alarm (default **every 60 s**,
+  user-tunable in the popup, clamped to Chrome's 30 s alarm floor) instead of the
+  old 5-minute heartbeat, so the CLI's config stays fresh unattended.
+- **Self-healing people-search `queryId`** — LinkedIn rotates
+  `voyagerSearchDashClusters.<hash>` on every deploy, which made
+  `osint employees` fail with *HTTP 400*. The id is **not** recoverable
+  client-side: the search page HTML carries no `queryId` (verified — 802 KB app
+  shell, zero occurrences), the JS bundles only reference
+  `voyagerSearchDashSearchHome`, and the legacy `search/hits`, `search/blended`
+  and `typeahead/hitsV2` endpoints are gone (400/404). So the extension learns it
+  from the only reliable source — LinkedIn's own GraphQL call: it briefly opens
+  the people-search page in a **background tab**, records the hash that page
+  uses, closes the tab, and forwards it with the session. `osint employees` now
+  reports the `query_id` it used, and a rotated hash produces an actionable error
+  instead of a silent *0 employees* (every page 400s and the command previously
+  exited 0 anyway).
+- **Session/config integrity fixes** — a family of "partial object written over
+  the stored session" bugs, plus the loose ends around it:
+  - `linkedin login` (all three capture paths), the mid-run 401 auto-refresh and
+    the extension bridge now persist through one canonical `saveSession()`, which
+    replaces the session-coupled fields (`li_at`, `jsessionid`, `cookie_header`)
+    together and preserves sticky metadata (`profile_name`, `profile_urn`,
+    `query_id`). Each of those paths used to silently drop whatever it did not
+    mention.
+  - **A stored cookie jar can no longer override a fresh login.** A full jar wins
+    over `li_at`/`JSESSIONID` at request time, so a jar from an earlier session
+    kept the CLI on the OLD credentials while reporting success.
+    `client.jarBelongsToSession()` now verifies the jar's identity cookies match
+    the configured pair and otherwise sends the fresh credentials (warning once).
+  - `saveSession` **drops** a stored jar when the new session has none — keeping
+    it would resurrect the previous session.
+  - Config writes are **atomic** (temp file + rename): the bridge saves every
+    ~60s while other processes read, so a reader could previously observe a
+    truncated file and report "not logged in"; a crash could destroy the session.
+  - `loadConfig` no longer throws on a partial or hand-edited config (it used to
+    swallow the error and report "no session" even when `li_at` was valid), and
+    `config.json` is forced to 0600 even when it already existed.
+  - `linkedin logout` **warns when a bridge is still listening** — the always-on
+    auto-send would otherwise save the browser session straight back within ~60s,
+    silently cancelling the logout.
+  - Shell history no longer records credentials (`login --li-at …` is redacted
+    before it reaches disk) and is created 0600; the tool-owned browser profile
+    directory is created 0700.
+  - `tests/config-write-policy.test.ts` fails the suite if any module outside
+    `core/config.ts` calls `saveConfig` wholesale again.
+- **Browser-assisted login (`linkedin login --browser`)** — captures the session
+  from a **tool-owned persistent Chromium profile**
+  (`~/.linkedin-cli/browser-profile`) over the Chrome DevTools Protocol. Sign in
+  **once**; every later run reuses that profile silently, and when it is already
+  signed in the capture runs **headless** with no window (`--headless` forces a
+  headless attempt). A tool-owned profile sidesteps both Chrome 136's refusal to
+  debug the default data directory and Chrome's app-bound (`v11`/`v20`) cookie
+  encryption, because CDP returns already-decrypted values. Falls back to the
+  manual cookie-paste prompt when no Chromium binary is available. The shell's
+  `login` builtin and Session menu route here first.
 - **Windows/Edge cookie import (`--from-chrome`)** — DPAPI-unlocked master key
   from the browser's `Local State` (via PowerShell) + AES-256-GCM decryption of
-  `v10` cookies; `v11`/`v20` app-bound cookies are detected and routed to the
-  DevTools Protocol capture above. SQLite access uses the `sqlite3` CLI when
-  present and Node's built-in `node:sqlite` otherwise, so no extra install is
-  needed on Windows. Cookie-database copies retry briefly when the browser
-  holds the file locked.
+  `v10` cookies. When the store is app-bound (`v11`/`v20`, the default on current
+  Chrome/Edge on Windows) the command now **auto-routes to the live CDP capture**
+  above instead of failing with an opaque decryption error. SQLite access uses
+  the `sqlite3` CLI when present and Node's built-in `node:sqlite` otherwise.
+- **Session auto-refresh** — the HTTP client re-captures the session from the
+  persistent browser profile and retries once when a request hits a mid-run 401,
+  so long multi-call scrapes (`osint employees`, `osint funnel`, `profile view`)
+  survive a token LinkedIn expires partway through.
+- **Browser-extension session bridge (`linkedin login --extension`)** — a tiny
+  MV3 extension (`assets/browser-extension/`) reads the *decrypted* LinkedIn
+  cookies with `chrome.cookies` (immune to app-bound `v11`/`v20` encryption and
+  the Chrome 136 default-profile debug ban) and POSTs them to a localhost
+  listener on `127.0.0.1:8787`, so an existing sign-in is captured with **no
+  re-login and no cookie decryption**. It also observes LinkedIn's own GraphQL
+  calls (`chrome.webRequest`) to record the **current people-search `queryId`**,
+  which LinkedIn rotates per deploy — so `osint employees` keeps working after a
+  rotation without a code change. Load it once via `chrome://extensions` →
+  Developer mode → Load unpacked.
+- **Extension request transport (`LINKEDIN_HTTP=extension`) + `extension`
+  command group** — with the companion extension loaded, every Voyager call can
+  be executed **inside the browser itself**: the CLI queues requests on a
+  localhost poll-proxy (`127.0.0.1:8788`, override with
+  `LINKEDIN_EXTENSION_PROXY_PORT`), the extension picks each one up and runs
+  `fetch()` with the real browser TLS/HTTP2 fingerprint and the live cookie jar
+  (no decryption, no re-login), then posts the response back. Two new commands
+  manage the bridge: `linkedin extension install` (copies the bundled extension
+  to a stable folder — default `~/.linkedin-cli/browser-extension` — and prints
+  the exact "Load unpacked" steps) and `linkedin extension status` (connectivity
+  check + troubleshooting).
 
 - **Shell REPL is now the default console** — bare `linkedin` on a TTY (or
   `linkedin menu` / the new `linkedin shell` alias) opens a bash/PowerShell-style

@@ -83,6 +83,10 @@ export const COMMAND_SYNONYMS: Record<string, string[]> = {
   'osint_email-lookup': ['email lookup', 'look up emails', 'delve lookup'],
   'osint_deep-dive': ['deep dive', 'profile deep dive', 'dive into profile'],
   osint_funnel: ['full funnel', 'funnel pipeline', 'run funnel'],
+  // — extension (3)
+  extension_install: ['install extension', 'add extension', 'setup extension'],
+  extension_listen: ['extension listen', 'keep bridge listening', 'start bridge listener'],
+  extension_status: ['extension status', 'check extension', 'bridge status'],
   // __TABLE_PART2__
 };
 

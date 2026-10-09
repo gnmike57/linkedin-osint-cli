@@ -82,6 +82,12 @@ export const GROUP_META: Record<string, CatalogGroupInfo> = {
     tagline: 'OSINT toolkit',
     hint: 'Discover companies, scrape employees, names, classify, orgcharts, matrix, funnel, email lookup',
   },
+  extension: {
+    group: 'extension',
+    icon: '🧩',
+    tagline: 'Browser Extension',
+    hint: 'Install/status the Chrome bridge for real-browser API proxying',
+  },
 };
 
 export interface CatalogEntry {

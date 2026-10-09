@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn CLI Session Bridge",
+  "version": "1.1.0",
+  "description": "Captures your existing LinkedIn session cookies (via chrome.cookies) and forwards them to the local `linkedin` CLI on 127.0.0.1 (manual button or auto-send). Local-only; no credentials, no remote calls.",
+  "permissions": ["cookies", "alarms", "webRequest", "storage"],
+  "host_permissions": [
+    "*://*.linkedin.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": { "service_worker": "service-worker.js" },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "LinkedIn CLI — send session"
+  }
+}

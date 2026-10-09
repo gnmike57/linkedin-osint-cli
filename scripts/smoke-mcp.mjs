@@ -22,7 +22,7 @@ if (!existsSync(entry)) {
 }
 
 const EXPECTED_MIN_TOOLS = 56;
-const REQUIRED_TOOLS = ['profile_me', 'search_people', 'osint_classify', 'osint_funnel', 'osint_email-lookup'];
+const REQUIRED_TOOLS = ['profile_me', 'search_people', 'osint_classify', 'osint_funnel', 'osint_email-lookup', 'extension_listen'];
 
 const child = spawn(process.execPath, [entry, 'mcp'], { stdio: ['pipe', 'pipe', 'pipe'] });
 

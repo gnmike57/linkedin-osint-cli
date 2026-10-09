@@ -1,24 +1,58 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { getConfigDir } from './config.js';
 
 /**
  * Cookie capture via the Chrome DevTools Protocol (CDP).
  *
- * Chrome/Edge on Windows encrypt LinkedIn cookies as v11/v20 "app-bound"
- * values when the browser is running, and no external process can decrypt
- * them. This module instead starts a Chromium browser with a throwaway
- * profile and `--remote-debugging-port=0`, and reads cookies live over CDP
- * while the user signs in — no decryption involved.
+ * Chrome/Edge encrypt LinkedIn cookies as v11/v20 "app-bound" values that no
+ * external process can decrypt, and since Chrome 136 the *default* profile can
+ * no longer be debugged at all (the remote-debugging switches are ignored for
+ * it). So instead of reading Chrome's on-disk store, this module launches
+ * Chromium on a **tool-owned persistent profile** with a non-standard
+ * `--user-data-dir` and `--remote-debugging-port=0`, then reads cookies live
+ * over CDP — Chrome hands CDP the decrypted values, so app-bound encryption is
+ * irrelevant.
  *
- * The temporary profile is deleted afterwards, so the browser keeps no copy
- * of the login; only the CLI's config receives the session cookies.
+ * The profile is stable across runs (`~/.linkedin-cli/browser-profile`), so the
+ * user signs in **once**. Later captures are silent and headless: if the profile
+ * is already signed in, the session is read instantly with no window shown.
  */
 
-const LOGIN_URL = 'https://www.linkedin.com/login';
-const DEFAULT_TIMEOUT_MS = 180_000;
+/**
+ * Landing page for capture. `/feed/` covers both cases: a signed-in profile
+ * lands on the feed (instant capture); a signed-out one is redirected by
+ * LinkedIn to the login page, where the user signs in once.
+ */
+const LOGIN_URL = 'https://www.linkedin.com/feed/';
+const PROFILE_DIR_NAME = 'browser-profile';
+const DEFAULT_TIMEOUT_MS = 300_000;
+/** Budget for the silent headless reuse pass before falling back to sign-in. */
+const REUSE_TIMEOUT_MS = 20_000;
 const POLL_INTERVAL_MS = 2_000;
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
+/**
+ * Wait budget for the sign-in, overridable via LINKEDIN_LOGIN_TIMEOUT_MS
+ * (milliseconds, minimum 30s). The default of 5 minutes leaves room for
+ * 2FA prompts and identity checks — killing the window earlier discards a
+ * login the user is about to complete.
+ */
+export function loginTimeoutMs(): number {
+  const raw = Number(process.env.LINKEDIN_LOGIN_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw >= 30_000 ? raw : DEFAULT_TIMEOUT_MS;
+}
+
+/**
+ * Stable, tool-owned Chromium profile directory. Kept across runs so a single
+ * sign-in is reused forever; lives beside the config file so `logout` can clean
+ * it up. Exported for tests and for callers that want to inspect/clear it.
+ */
+export function getBrowserProfileDir(): string {
+  return join(getConfigDir(), PROFILE_DIR_NAME);
+}
 
 export interface CdpCookie {
   name: string;
@@ -42,11 +76,15 @@ export function chromiumBinaryCandidates(): string[] {
     const pfx = process.env['PROGRAMFILES(X86)'] ?? 'C:\\Program Files (x86)';
     const local = process.env.LOCALAPPDATA ?? '';
     return [
-      join(pfx, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-      join(pf, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      // Chrome first: this project's profile-sourced auth targets Chrome, and
+      // capturing a session in a different browser than the one the CLI reads
+      // from would silently split the two. Edge stays as a last-resort
+      // fallback for machines without Chrome.
       join(pf, 'Google', 'Chrome', 'Application', 'chrome.exe'),
       join(pfx, 'Google', 'Chrome', 'Application', 'chrome.exe'),
       ...(local ? [join(local, 'Google', 'Chrome', 'Application', 'chrome.exe')] : []),
+      join(pf, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      join(pfx, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
     ];
   }
   if (process.platform === 'darwin') {
@@ -179,33 +217,95 @@ async function closeBrowser(wsUrl: string): Promise<void> {
   }
 }
 
+/** Options for {@link captureLinkedInCookiesViaCdp}. */
+export interface CdpCaptureOptions {
+  /** Persistent profile dir (default: {@link getBrowserProfileDir}). */
+  profileDir?: string;
+  /** Overall sign-in wait budget in ms (default: {@link loginTimeoutMs}). */
+  timeoutMs?: number;
+  /** Launch headless (only useful when the profile is already signed in). */
+  headless?: boolean;
+  /** Page to open on launch (default: the LinkedIn feed). */
+  loginUrl?: string;
+  /** Progress sink (default: stderr). */
+  onStatus?: (message: string) => void;
+}
+
 /**
- * Open a dedicated Chromium window at the LinkedIn login page and capture the
- * session cookies over CDP once the user signs in. Throws on timeout or when
- * no Chromium binary is available.
+ * Capture the LinkedIn session from the tool-owned *persistent* browser profile.
+ *
+ * Silent pass: if the profile already exists, launch headless and read cookies
+ * immediately (no window, no user action). If that yields nothing (first run or
+ * an expired session), open a headful window for a one-time sign-in and wait up
+ * to `timeoutMs`. Throws when no Chromium binary is available or the sign-in
+ * window times out.
  */
 export async function captureLinkedInCookiesViaCdp(
-  timeoutMs = DEFAULT_TIMEOUT_MS,
+  options: CdpCaptureOptions = {},
 ): Promise<CdpCaptureResult> {
   const bin = findChromiumBinary();
   if (!bin) {
     throw new Error('No Chrome or Edge installation found for browser-assisted login.');
   }
+  const profileDir = options.profileDir ?? getBrowserProfileDir();
+  const loginUrl = options.loginUrl ?? LOGIN_URL;
+  const timeoutMs = options.timeoutMs ?? loginTimeoutMs();
+  const onStatus = options.onStatus ?? ((m: string) => process.stderr.write(`${m}\n`));
 
-  const profileDir = mkdtempSync(join(tmpdir(), 'linkedin-cli-cdp-'));
-  const child = spawn(
-    bin,
-    [
-      `--user-data-dir=${profileDir}`,
-      '--remote-debugging-port=0',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-sync',
-      '--disable-session-crashed-bubble',
-      LOGIN_URL,
-    ],
-    { stdio: 'ignore' },
+  const hadProfile = existsSync(profileDir) && readdirSync(profileDir).length > 0;
+  // The profile holds the live LinkedIn session (Chromium's encrypted cookie
+  // store plus browsing state), so keep it owner-only. `mode` only applies when
+  // the directory is created, hence the explicit chmod for a profile left by an
+  // earlier build.
+  mkdirSync(profileDir, { recursive: true, mode: 0o700 });
+  try {
+    chmodSync(profileDir, 0o700);
+  } catch {
+    /* best effort: Windows and some filesystems have no POSIX modes */
+  }
+
+  // Pass 1 — silent reuse of an existing sign-in (headless, short budget).
+  if (hadProfile && options.headless !== false) {
+    const reused = await runCdpCapture(bin, profileDir, loginUrl, {
+      headless: true,
+      budgetMs: Math.min(timeoutMs, REUSE_TIMEOUT_MS),
+      onStatus: () => {},
+    });
+    if (reused) return reused;
+  }
+
+  // Pass 2 — headful sign-in window (or headless when explicitly requested).
+  const captured = await runCdpCapture(bin, profileDir, loginUrl, {
+    headless: options.headless === true,
+    budgetMs: timeoutMs,
+    onStatus,
+  });
+  if (captured) return captured;
+  throw new Error(
+    `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for the LinkedIn login ` +
+      'in the browser window.',
   );
+}
+
+/** One CDP capture attempt against `profileDir`; null when no session appears. */
+async function runCdpCapture(
+  bin: string,
+  profileDir: string,
+  loginUrl: string,
+  opts: { headless: boolean; budgetMs: number; onStatus: (m: string) => void },
+): Promise<CdpCaptureResult | null> {
+  const args = [
+    `--user-data-dir=${profileDir}`,
+    '--remote-debugging-port=0',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--disable-sync',
+    '--disable-session-crashed-bubble',
+  ];
+  if (opts.headless) args.push('--headless=new');
+  args.push(loginUrl);
+
+  const child = spawn(bin, args, { stdio: 'ignore' });
 
   const portFile = join(profileDir, 'DevToolsActivePort');
   const readWsUrl = (): string => {
@@ -217,20 +317,17 @@ export async function captureLinkedInCookiesViaCdp(
   try {
     const startDeadline = Date.now() + 30_000;
     while (!existsSync(portFile)) {
-      if (child.exitCode !== null) {
-        throw new Error('The browser exited before CDP became available.');
-      }
-      if (Date.now() > startDeadline) {
-        throw new Error('Timed out waiting for the browser to start.');
-      }
+      // On Windows the launched chrome.exe is only a launcher that hands off to
+      // the real browser process and exits; the 30s deadline is the authority on
+      // whether CDP came up.
+      if (Date.now() > startDeadline) return null;
       await sleep(250);
     }
     const wsUrl = readWsUrl();
-    if (!wsUrl) {
-      throw new Error('The browser wrote an invalid DevToolsActivePort file.');
-    }
+    if (!wsUrl) return null;
 
-    const deadline = Date.now() + timeoutMs;
+    const deadline = Date.now() + opts.budgetMs;
+    let nextHeartbeat = Date.now() + HEARTBEAT_INTERVAL_MS;
     while (Date.now() < deadline) {
       try {
         const cookies = await cdpGetCookies(wsUrl);
@@ -244,9 +341,17 @@ export async function captureLinkedInCookiesViaCdp(
       } catch {
         /* browser still starting or transient CDP failure — keep polling */
       }
+      if (Date.now() >= nextHeartbeat) {
+        const remainingS = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+        opts.onStatus(
+          `Still waiting for sign-in… ${remainingS}s remaining. ` +
+            'Complete the login in the browser window and leave it open.',
+        );
+        nextHeartbeat = Date.now() + HEARTBEAT_INTERVAL_MS;
+      }
       await sleep(POLL_INTERVAL_MS);
     }
-    throw new Error('Timed out waiting for the LinkedIn login in the browser window.');
+    return null;
   } finally {
     await closeBrowser(readWsUrl()).catch(() => undefined);
     try {
@@ -254,10 +359,6 @@ export async function captureLinkedInCookiesViaCdp(
     } catch {
       /* ignore */
     }
-    try {
-      rmSync(profileDir, { recursive: true, force: true });
-    } catch {
-      /* ignore */
-    }
+    // The profile is intentionally preserved — the sign-in is meant to persist.
   }
 }

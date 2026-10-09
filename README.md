@@ -3,9 +3,9 @@
 [![CI](https://github.com/gnmike57/linkedin-osint-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/gnmike57/linkedin-osint-cli/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-Full LinkedIn platform management from your terminal. 43 platform commands (profiles, posts, messaging, connections, search, feed, engagement) **plus an OSINT suite**: company discovery, employee scraping, username generation, role classification, org charts, and email deanonymization — powered by cookie session auth.
+Full LinkedIn platform management from your terminal. 46 platform commands (profiles, posts, messaging, connections, search, feed, engagement, extension bridge) **plus an OSINT suite**: company discovery, employee scraping, username generation, role classification, org charts, and email deanonymization — powered by cookie session auth.
 
-Works as a **CLI** and an **MCP server** (for Claude Code, Cursor, Windsurf, and other AI agents). All 56 tools (43 platform + 13 OSINT) are exposed over MCP automatically, plus an interactive console for humans.
+Works as a **CLI** and an **MCP server** (for Claude Code, Cursor, Windsurf, and other AI agents). All 59 tools (46 platform + 13 OSINT) are exposed over MCP automatically, plus an interactive console for humans.
 
 ## OSINT Suite
 
@@ -88,10 +88,11 @@ The opt-in `--from-chrome` and `LINKEDIN_HTTP=curl-impersonate` paths are **loca
 
 Default Node `fetch` has a TLS/JA3 fingerprint that is not Chrome. LinkedIn often detects that and **invalidates `li_at` on the first Voyager call** (issue [#1](https://github.com/bcharleson/linkedincli/issues/1)). Manual `li_at` + `JSESSIONID` paste still works for some accounts, but is the fragile path.
 
-Two **opt-in, local-only** workarounds (default transport remains Node `fetch`):
+Three **opt-in, local-only** workarounds (default transport remains Node `fetch`):
 
-1. **`LINKEDIN_HTTP=curl-impersonate`** — on the local harness, shell out to `curl_chrome123` so the TLS ClientHello matches Chrome.
-2. **`--from-chrome` / `LINKEDIN_FROM_CHROME=1`** — on the local harness, read the full `linkedin.com` cookie jar from a local Chrome profile (not just the two auth tokens).
+1. **`LINKEDIN_HTTP=extension` (best)** — route every Voyager call through the browser extension itself: real browser TLS/HTTP2 fingerprint, live cookie jar, no decryption, no re-login. Set it up with `linkedin extension install`; check the bridge with `linkedin extension status`.
+2. **`LINKEDIN_HTTP=curl-impersonate`** — on the local harness, shell out to `curl_chrome123` so the TLS ClientHello matches Chrome.
+3. **`--from-chrome` / `LINKEDIN_FROM_CHROME=1`** — on the local harness, read the full `linkedin.com` cookie jar from a local Chrome profile (not just the two auth tokens).
 
 Use them together on the local machine when possible.
 
@@ -150,23 +151,68 @@ actually runs.
 ### Option A — Login via browser (recommended)
 
 LinkedIn has no consumer OAuth2 for personal sessions, so the CLI captures your
-browser session instead. `--browser` opens `linkedin.com/login` in your default
-browser, then polls the local Chromium cookie store until the session appears
-(up to 3 minutes) and saves it:
+browser session instead. `--browser` uses a **tool-owned persistent Chromium
+profile** (`~/.linkedin-cli/browser-profile`) and captures the session live over
+the DevTools Protocol:
 
 ```bash
 linkedin login --browser
 ```
 
-If you use Chrome/Edge on Windows, macOS, or Linux with the Default profile,
-that's the whole flow — sign in in the browser window and the CLI picks it up
-automatically. If your browser encrypts its cookies so other programs cannot
-read them (`v11`/`v20` app-bound encryption, the default on current
-Chrome/Edge on Windows), the CLI opens a dedicated login window instead and
-captures the session live over the DevTools Protocol — sign in there and the
-cookies are captured automatically; the temporary browser profile is deleted
-afterwards. If no readable Chromium binary exists (Firefox/Safari users,
-custom setups), the command falls back to the manual paste prompt in Option C.
+You sign in **once**. The profile persists across runs, so later commands (and
+any mid-run session refresh) reuse it silently — and when it is already signed
+in, the capture runs **headless** with no window on screen (`--headless` forces a
+headless attempt). Your default browser is never opened or modified, so an
+existing LinkedIn sign-in there is untouched. A tool-owned profile is exactly
+what makes this robust on current Chrome: Chrome 136 refuses to debug the default
+data directory, and app-bound (`v11`/`v20`) cookies cannot be decrypted by any
+other process — CDP sidesteps both because it returns decrypted values. If a
+valid session is already stored, `login --browser` does nothing and says so — run
+`linkedin logout` first to switch accounts. If no readable Chromium binary exists
+(Firefox/Safari users, custom setups), the command falls back to the manual paste
+prompt in Option C.
+
+**Even easier — no re-login at all: the extension bridge.** If you are already
+signed in to LinkedIn in Chrome, load the companion extension
+(`assets/browser-extension`) once via `chrome://extensions` → turn on **Developer
+mode** → **Load unpacked**, then run:
+
+```bash
+linkedin login --extension
+```
+
+and click the extension's icon (**Send session to CLI**). The extension reads the
+*decrypted* cookies with `chrome.cookies` (so Chrome's app-bound `v11`/`v20`
+encryption is irrelevant) and POSTs them to a local listener on
+`127.0.0.1:8787`. Nothing leaves your machine.
+
+For unattended use, run the long-lived listener instead of the one-shot login —
+it accepts a session at any moment, and the extension pushes one on a repeating
+alarm (default every 60 s, configurable in the popup):
+
+```bash
+linkedin extension listen      # keep the bridge up; saves every session it receives
+```
+
+Three helpers manage the bridge:
+
+```bash
+linkedin extension install     # copy the extension to a stable folder + exact load steps
+linkedin extension listen      # long-lived bridge (stops on Ctrl+C)
+linkedin extension status      # is the bridge connected and ready?
+```
+
+The extension also **re-learns the people-search `queryId` by itself** (LinkedIn
+rotates the hash on every deploy and it is not present in the page HTML): it
+briefly opens the people-search page in a background tab, records the GraphQL
+`queryId` that page actually uses, closes the tab, and forwards it to the CLI —
+so `osint employees` keeps working after a rotation with no manual search.
+
+With the extension loaded you can go further: `LINKEDIN_HTTP=extension` routes
+**every** Voyager call through the browser itself (the CLI queues requests on a
+localhost proxy at `127.0.0.1:8788` and the extension executes them with real
+browser TLS, HTTP/2 and cookies) — the strongest fingerprint camouflage
+available, and local-only.
 
 The interactive shell (`linkedin` with no args) routes `login` here, and the
 Session menu lists it first as **login via browser (recommended)**.
@@ -195,9 +241,11 @@ Environment equivalents: `LINKEDIN_FROM_CHROME=1`, `LINKEDIN_CHROME_PROFILE=Defa
 
 On Windows the master key is unlocked with DPAPI (via PowerShell) from the
 browser's `Local State`; `v10` cookies decrypt with AES-256-GCM. `v11`/`v20`
-app-bound encrypted cookies (Chrome 127+ app-bound rollout) cannot be decrypted
-from another process and are skipped — `linkedin login --browser` detects this
-and captures the session over the DevTools Protocol instead (see Option A).
+app-bound encrypted cookies (Chrome 127+) cannot be decrypted from another
+process. When the store is app-bound, `linkedin login --from-chrome`
+automatically detects this and captures the session over the DevTools Protocol
+using the tool-owned persistent profile instead (see Option A) — no manual error
+to work around.
 
 Cookie values are never printed to stdout/stderr.
 
@@ -374,6 +422,11 @@ export LINKEDIN_JSESSIONID="your_jsessionid_cookie"
 export LINKEDIN_HTTP=curl-impersonate
 # export LINKEDIN_CURL_IMPERSONATE_BIN=/path/to/curl_chrome123
 
+# Best: proxy every API call through the browser extension
+# (run `linkedin extension install` first; port default 8788)
+export LINKEDIN_HTTP=extension
+# export LINKEDIN_EXTENSION_PROXY_PORT=8788
+
 # Opt-in: read the full LinkedIn cookie jar from Chrome
 export LINKEDIN_FROM_CHROME=1
 # export LINKEDIN_CHROME_PROFILE="Profile 1"
@@ -385,7 +438,7 @@ Auth resolution order: `--from-chrome` / `LINKEDIN_FROM_CHROME` → `--li-at`/`-
 
 ## MCP Server (AI Agents)
 
-All 56 tools (43 platform + 13 OSINT) are available as MCP tools. The MCP process that talks to LinkedIn must run on the **local harness**. Cloud agents and Grok Bot may install the CLI binary or call this local MCP — they must not hold cookies or originate Voyager calls.
+All 59 tools (46 platform + 13 OSINT) are available as MCP tools. The MCP process that talks to LinkedIn must run on the **local harness**. Cloud agents and Grok Bot may install the CLI binary or call this local MCP — they must not hold cookies or originate Voyager calls.
 
 ### Local Claude Code / Cursor / Windsurf
 

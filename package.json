@@ -1,7 +1,7 @@
 {
   "name": "@bcharleson/linkedincli",
   "version": "0.2.0",
-  "description": "CLI and MCP server for LinkedIn — 43 platform commands plus an OSINT suite (company discovery, employee scraping, username generation, role classification, org charts). Cookie session auth, AI agent native.",
+  "description": "CLI and MCP server for LinkedIn — 45 platform commands plus an OSINT suite (company discovery, employee scraping, username generation, role classification, org charts). Cookie session auth, AI agent native.",
   "type": "module",
   "bin": {
     "linkedin": "./dist/index.js"
@@ -43,13 +43,15 @@
     "zod": "^4.3.6"
   },
   "optionalDependencies": {
-    "@inquirer/prompts": "^8.3.1"
+    "@inquirer/prompts": "^8.7.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "eslint": "^9.39.5",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.1",
     "vitest": "^5.0.3"
   },
   "overrides": {

@@ -1,15 +1,10 @@
 import { spawn } from 'node:child_process';
 import { Command } from 'commander';
-import { saveConfig } from '../../core/config.js';
+import { saveSession } from '../../core/config.js';
 import { createClient } from '../../core/client.js';
 import { output, outputError } from '../../core/output.js';
 import { resolveAuth, wantsFromChrome } from '../../core/auth.js';
-import { chromiumCookieStoreAvailable, linkedInCookiesAreAppBound } from '../../core/chrome-cookies.js';
 import type { GlobalOptions, LinkedInAuth } from '../../core/types.js';
-
-const LINKEDIN_LOGIN_URL = 'https://www.linkedin.com/login';
-const BROWSER_POLL_INTERVAL_MS = 3_000;
-const LOCAL_POLL_BUDGET_MS = 60_000;
 
 /** Open a URL in the user's default browser. Never waits for the browser. */
 export function openInBrowser(url: string): void {
@@ -26,39 +21,15 @@ export function openInBrowser(url: string): void {
   child.unref();
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/**
- * Poll the local Chromium cookie store until a LinkedIn session appears.
- * Bounded by `budgetMs` so a v20-encrypted or locked store cannot stall the
- * flow. Returns undefined on timeout; callers should fall back to CDP capture.
- */
-async function pollLocalCookieStore(
-  chromeProfile: string | undefined,
-  budgetMs: number,
-): Promise<LinkedInAuth | undefined> {
-  const deadline = Date.now() + budgetMs;
-  while (Date.now() < deadline) {
-    try {
-      const auth = await resolveAuth({ fromChrome: true, chromeProfile });
-      process.stderr.write('Session cookies captured from the browser.\n');
-      return auth;
-    } catch {
-      await sleep(BROWSER_POLL_INTERVAL_MS);
-    }
-  }
-  return undefined;
-}
-
 /**
  * CDP capture fallback: open a dedicated Chromium window (throwaway profile)
  * and read cookies live while the user signs in. Works regardless of cookie
  * encryption; the temporary profile is deleted afterwards.
  */
-async function captureViaCdp(): Promise<LinkedInAuth | undefined> {
+async function captureViaCdp(options: { headless?: boolean } = {}): Promise<LinkedInAuth | undefined> {
   try {
     const { captureLinkedInCookiesViaCdp } = await import('../../core/cdp-cookies.js');
-    const cdp = await captureLinkedInCookiesViaCdp();
+    const cdp = await captureLinkedInCookiesViaCdp({ headless: options.headless });
     process.stderr.write('Session cookies captured from the browser.\n');
     return {
       liAt: cdp.liAt,
@@ -66,8 +37,24 @@ async function captureViaCdp(): Promise<LinkedInAuth | undefined> {
       cookieHeader: cdp.cookieHeader,
       cookies: cdp.cookies,
     } as LinkedInAuth;
-  } catch {
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`Browser session capture failed: ${reason}\n`);
     return undefined;
+  }
+}
+
+/**
+ * True when this machine's Chromium stores LinkedIn cookies app-bound
+ * (v11/v20) — unreadable by any external process. Used to route `--from-chrome`
+ * to live CDP capture instead of failing with an opaque decryption error.
+ */
+async function isAppBoundChromeStore(): Promise<boolean> {
+  try {
+    const { linkedInCookiesAreAppBound } = await import('../../core/chrome-cookies.js');
+    return await linkedInCookiesAreAppBound();
+  } catch {
+    return false;
   }
 }
 
@@ -89,7 +76,10 @@ export function registerLoginCommand(program: Command): void {
     .option('--jsessionid <cookie>', 'JSESSIONID cookie value (from browser DevTools)')
     .option('--from-chrome', 'Read cookies from a Chrome/Edge profile on this local machine')
     .option('--chrome-profile <name>', 'Chrome profile directory name (default: Default)')
-    .option('--browser', 'Open LinkedIn login in your default browser and capture the session automatically')
+    .option('--browser', 'Open a dedicated browser window (tool-owned profile) and capture the session automatically — sign in once, reused on later runs')
+    .option('--extension', 'Capture the session from the companion Chrome extension (no re-login; load assets/browser-extension first)')
+    .option('--port <n>', 'Localhost port for --extension (default: 8787)', '8787')
+    .option('--headless', 'With --browser/--from-chrome: run the capture browser headless (only works if that profile is already signed in)')
     .option('--skip-validation', 'Save cookies without verifying them against LinkedIn')
     .action(async function (this: Command) {
       const localOpts = this.opts() as Record<string, string | boolean | undefined>;
@@ -102,31 +92,73 @@ export function registerLoginCommand(program: Command): void {
         const chromeProfile = (localOpts.chromeProfile ?? globalOpts.chromeProfile) as string | undefined;
         let chromeAuth: LinkedInAuth | undefined;
 
+        if (localOpts.extension) {
+          // Capture from the companion browser extension over a localhost socket
+          // — works with app-bound cookies and needs no re-login.
+          const { captureSessionFromExtension } = await import('../../core/extension-bridge.js');
+          const port = localOpts.port ? Number(localOpts.port) : undefined;
+          const cap = await captureSessionFromExtension({ port, validate: !skipValidation });
+          await saveSession({
+            li_at: cap.liAt,
+            jsessionid: cap.jsessionid,
+            cookie_header: cap.cookieHeader,
+            ...(cap.queryId ? { query_id: cap.queryId } : {}),
+          });
+          output(
+            {
+              message: 'Login successful (session captured from the browser extension)',
+              cookies: cap.cookieHeader.split(';').length,
+              query_id: cap.queryId,
+              config: '~/.linkedin-cli/config.json',
+              validated: !skipValidation,
+            },
+            globalOpts,
+          );
+          return;
+        }
+
         if (localOpts.browser && !(liAt && jsessionid)) {
-          // Browser-assisted login: capture the session from the browser.
-          // LinkedIn has no consumer OAuth2, so capturing the browser session
-          // is the supported way to authenticate this CLI.
-          const appBound = await linkedInCookiesAreAppBound().catch(() => false);
-          if (chromiumCookieStoreAvailable(chromeProfile) && !appBound) {
-            openInBrowser(LINKEDIN_LOGIN_URL);
-            process.stderr.write(
-              'Opened linkedin.com/login in your default browser. ' +
-                'Sign in there and leave it open — this will capture the session automatically...\n',
-            );
-            chromeAuth = await pollLocalCookieStore(chromeProfile, LOCAL_POLL_BUDGET_MS);
-            if (!chromeAuth) {
-              process.stderr.write(
-                'The local cookie store did not yield a session. Opening a dedicated login window...\n',
+          // Browser-assisted login: LinkedIn has no consumer OAuth2, so
+          // capturing the browser session is the supported way to
+          // authenticate this CLI.
+          //
+          // If a valid session is already stored, do nothing — never disturb
+          // an existing login.
+          const { loadConfig } = await import('../../core/config.js');
+          const existing = await loadConfig().catch(() => null);
+          if (existing?.li_at && existing?.jsessionid) {
+            try {
+              const client = createClient({
+                liAt: existing.li_at,
+                jsessionid: existing.jsessionid,
+                ...(existing.cookie_header ? { cookieHeader: existing.cookie_header } : {}),
+              });
+              const me = await client.get<any>('/me');
+              const name = [me?.firstName, me?.lastName].filter(Boolean).join(' ');
+              output(
+                {
+                  logged_in: true,
+                  source: 'config',
+                  session_valid: true,
+                  profile: name || existing.profile_name || 'Unknown',
+                  message:
+                    `Already signed in${name ? ` as ${name}` : ''}. Nothing to do. ` +
+                    "Run 'linkedin logout' first to switch accounts.",
+                },
+                globalOpts,
               );
-              chromeAuth = await captureViaCdp();
+              return;
+            } catch {
+              // Stored session is stale or unverifiable — re-login below.
             }
-          } else {
-            process.stderr.write(
-              'Your browser encrypts its cookies so other programs cannot read them. ' +
-                'Opening a dedicated login window — sign in there and your session will be captured automatically.\n',
-            );
-            chromeAuth = await captureViaCdp();
           }
+          // Capture over CDP on the tool-owned *persistent* profile: sign in
+          // once, and every later run reuses it silently (and headless).
+          process.stderr.write(
+            'Opening the dedicated login window (tool-owned profile) — ' +
+              'sign in once; the session is captured and reused on later runs.\n',
+          );
+          chromeAuth = await captureViaCdp({ headless: Boolean(localOpts.headless) });
           if (!chromeAuth) {
             process.stderr.write(
               'Could not capture the session automatically. Falling back to manual cookie paste.\n',
@@ -143,10 +175,29 @@ export function registerLoginCommand(program: Command): void {
             chromeProfile,
           })
         ) {
-          // Strict --from-chrome (no browser fallback): read once, throw on failure.
-          chromeAuth = await resolveAuth({ fromChrome: true, chromeProfile });
-          liAt = chromeAuth.liAt;
-          jsessionid = chromeAuth.jsessionid;
+          // Chrome 127+ stores LinkedIn cookies app-bound (v11/v20), which no
+          // external process can decrypt. Detect that and route to live CDP
+          // capture instead of failing with an opaque decryption error.
+          if (await isAppBoundChromeStore()) {
+            process.stderr.write(
+              'Chrome stores LinkedIn cookies app-bound (v11/v20) — direct read is ' +
+                'impossible. Switching to live browser capture (tool-owned profile).\n',
+            );
+            chromeAuth = await captureViaCdp({ headless: Boolean(localOpts.headless) });
+            if (!chromeAuth) {
+              throw new Error(
+                'Chrome cookies are app-bound and live capture did not complete. ' +
+                  'Run: linkedin login --browser',
+              );
+            }
+            liAt = chromeAuth.liAt;
+            jsessionid = chromeAuth.jsessionid;
+          } else {
+            // Readable cookies — read once, throw on failure.
+            chromeAuth = await resolveAuth({ fromChrome: true, chromeProfile });
+            liAt = chromeAuth.liAt;
+            jsessionid = chromeAuth.jsessionid;
+          }
         }
         // --browser with a failed capture falls through to the paste prompt.
         const strictChrome = Boolean(localOpts.fromChrome ?? globalOpts.fromChrome);
@@ -180,9 +231,13 @@ export function registerLoginCommand(program: Command): void {
         jsessionid = jsessionid.replace(/^"/, '').replace(/"$/, '');
 
         // Save cookies FIRST — before any validation. Never print cookie values.
-        await saveConfig({
+        // Persist the full captured jar (when available): LinkedIn invalidates
+        // sessions that present only li_at + JSESSIONID on later calls, and a jar
+        // from a DIFFERENT session must not survive — saveSession drops it.
+        await saveSession({
           li_at: liAt,
           jsessionid,
+          ...(chromeAuth?.cookieHeader ? { cookie_header: chromeAuth.cookieHeader } : {}),
         });
 
         // Optionally validate by fetching /me
@@ -195,12 +250,15 @@ export function registerLoginCommand(program: Command): void {
             const profileName = [me?.firstName, me?.lastName].filter(Boolean).join(' ') || 'Unknown';
             const profileUrn = me?.entityUrn ?? me?.publicIdentifier ?? '';
 
-            // Update config with profile info
-            await saveConfig({
+            // Update config with profile info. Sticky metadata (query_id) and a
+            // previously stored jar survive; the jar is only replaced when this
+            // login actually captured one.
+            await saveSession({
               li_at: liAt,
               jsessionid,
               profile_name: profileName,
               profile_urn: profileUrn,
+              ...(chromeAuth?.cookieHeader ? { cookie_header: chromeAuth.cookieHeader } : {}),
             });
 
             output({
@@ -243,8 +301,27 @@ export function registerLogoutCommand(program: Command): void {
       const globalOpts = program.optsWithGlobals() as GlobalOptions;
       try {
         const { deleteConfig } = await import('../../core/config.js');
+        const { isBridgeListening } = await import('../../core/extension-bridge.js');
         await deleteConfig();
-        output({ message: 'Logged out. Session cookies removed.' }, globalOpts);
+
+        // A long-running `extension listen` would save the browser session
+        // straight back on its next auto-send (~60s), silently re-logging the
+        // operator in. Say so instead of letting logout appear to work.
+        const bridgeUp = await isBridgeListening();
+        output(
+          {
+            message: 'Logged out. Session cookies removed.',
+            ...(bridgeUp
+              ? {
+                  warning:
+                    'A session bridge is still listening on 127.0.0.1:8787 — an ' +
+                    'always-on `linkedin extension listen` will save the browser ' +
+                    'session again within ~60s. Stop it first for the logout to stick.',
+                }
+              : {}),
+          },
+          globalOpts,
+        );
       } catch (error) {
         outputError(error, globalOpts);
       }

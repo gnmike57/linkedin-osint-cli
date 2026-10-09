@@ -5,12 +5,33 @@
  * session. Works on macOS, Windows and Linux via the existing config dir.
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getConfigDir } from '../core/config.js';
 
 const MAX_ENTRIES = 200;
 let warned = false;
+
+/**
+ * Flags whose value is a credential. `linkedin login --li-at <cookie>` is a
+ * supported auth path, and the shell persists every typed line — so without
+ * redaction a raw `li_at`/`JSESSIONID` would land in `~/.linkedin-cli/history`
+ * in plaintext, outliving the config it came from.
+ */
+const SECRET_FLAGS = ['--li-at', '--jsessionid', '--token', '--password', '--secret'];
+
+/** Mask the value of any secret-bearing flag (`--li-at x`, `--li-at=x`, quoted). */
+export function redactSecrets(line: string): string {
+  let out = line;
+  for (const flag of SECRET_FLAGS) {
+    const escaped = flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(
+      new RegExp(`(${escaped}[=\\s]+)("[^"]*"|'[^']*'|\\S+)`, 'gi'),
+      '$1***',
+    );
+  }
+  return out;
+}
 
 function warnOnce(message: string): void {
   if (warned) return;
@@ -49,13 +70,22 @@ export function loadHistory(configDir: string = getConfigDir()): string[] {
   }
 }
 
-/** Append one entry; the directory is created on demand; failures warn once. */
+/**
+ * Append one entry; the directory is created on demand; failures warn once.
+ *
+ * Secrets are masked here rather than at the call sites: this is the single
+ * boundary that touches disk, so no future caller can bypass it. The file is
+ * created owner-only (0600) — it can still hold fragments of real commands.
+ */
 export function appendHistory(line: string, configDir: string = getConfigDir()): void {
-  const trimmed = line.trim();
+  const trimmed = redactSecrets(line.trim());
   if (!trimmed) return;
   try {
+    const file = historyFilePath(configDir);
+    const existed = existsSync(file);
     mkdirSync(configDir, { recursive: true });
-    appendFileSync(historyFilePath(configDir), `${trimmed}\n`, 'utf-8');
+    appendFileSync(file, `${trimmed}\n`, { encoding: 'utf-8', mode: 0o600 });
+    if (!existed) chmodSync(file, 0o600); // 0600 on create, but be explicit
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     warnOnce(`could not write ${historyFilePath(configDir)} (${code ?? 'unknown error'})`);

@@ -17,20 +17,29 @@ LINKEDIN_JSESSIONID=<your JSESSIONID cookie>
 Optional **local-only** session-survival settings (see README). Default Node `fetch` is often TLS-fingerprinted and LinkedIn may invalidate `li_at` immediately:
 
 ```
-LINKEDIN_HTTP=curl-impersonate          # local curl_chrome123 (opt-in)
-LINKEDIN_CURL_IMPERSONATE_BIN=...       # override binary path on this machine
-LINKEDIN_FROM_CHROME=1                  # read cookies from a local Chrome profile
-LINKEDIN_CHROME_PROFILE=Default         # Chrome profile directory name
+LINKEDIN_HTTP=fetch                  # Node fetch (default; fragile)
+LINKEDIN_HTTP=curl-impersonate       # curl_chrome123 — better TLS fingerprint (opt-in)
+LINKEDIN_HTTP=extension              # Chrome extension bridge — REAL browser TLS/cookies (BEST)
+LINKEDIN_CURL_IMPERSONATE_BIN=...    # override curl-impersonate binary path
+LINKEDIN_FROM_CHROME=1               # read cookies from a local Chrome profile
+LINKEDIN_CHROME_PROFILE=Default      # Chrome profile directory name
+LINKEDIN_EXTENSION_PROXY_PORT=8788   # extension proxy server port (default 8788)
 ```
 
 CLI equivalents: `--from-chrome`, `--chrome-profile <name>`. These read the local Chrome/Edge profile and must not be used from a remote runner.
 
 Local harness login and session checks:
 ```bash
-linkedin login --browser    # open LinkedIn in your browser and capture the session automatically
-linkedin login              # paste li_at + JSESSIONID manually
-linkedin status --verify    # check if the session is valid
+linkedin login --browser     # capture from the tool-owned persistent profile (sign in once; reused + headless afterwards)
+linkedin login --extension   # capture from the companion Chrome extension — no re-login, app-bound-safe (assets/browser-extension)
+linkedin login               # paste li_at + JSESSIONID manually (fragile — thin sessions get killed)
+linkedin status --verify     # check if the session is valid
 ```
+
+`--from-chrome` auto-routes to the live CDP capture when Chrome stores cookies
+app-bound (`v11`/`v20`, the default on current Chrome/Edge), and the client
+transparently re-captures from the persistent profile and retries once on a
+mid-run `401` (so long multi-call scrapes survive an expired token).
 
 ---
 
@@ -629,6 +638,72 @@ Get "who viewed my profile" summary and view count.
 linkedin analytics profile-views
 ```
 **Parameters:** None
+
+---
+
+### Extension Tools
+
+Manage the browser-extension bridge (`assets/browser-extension`) used by
+`linkedin login --extension`, `linkedin extension listen`, and the
+`LINKEDIN_HTTP=extension` transport.
+
+#### `extension_install`
+Copy the bundled browser extension to a stable folder and print the exact
+"Load unpacked" steps. Browsers require unpacked extensions to be loaded
+manually — this never touches the browser's own user-data directory.
+```bash
+linkedin extension install
+linkedin extension install --browser edge
+```
+**Parameters:**
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `browser` | enum | no | `chrome` | Browser the instructions target: `chrome` or `edge` |
+| `out_dir` | string | no | `~/.linkedin-cli/browser-extension` | Destination directory |
+
+**Returns:** `message`, `steps[]`, `source`, `destination`, `files_copied[]`, `file_url`
+
+---
+
+#### `extension_listen`
+Keep the session bridge listening (long-running) so the browser extension can
+push its session + people-search `queryId` at any time; every capture is merged
+into `~/.linkedin-cli/config.json` (unrelated fields such as `profile_name` and
+an already-learned `query_id` are preserved). Unlike `login --extension` (which
+waits for a single POST and exits — so a click at the wrong moment fails with
+*"CLI not listening on 127.0.0.1:8787"*), this stays up. The extension auto-sends
+on a repeating alarm (default 60 s, user-tunable in the popup) and re-learns a
+rotated `queryId` by briefly loading the people-search page in a background tab.
+The listener only accepts `content-type: application/json`. **Long-running — over
+MCP a call blocks until interrupted**, so drive it from a terminal or pass
+`--seconds`.
+```bash
+linkedin extension listen                 # run until Ctrl+C
+linkedin extension listen --seconds 300   # bounded run
+linkedin extension listen --once          # first capture, then exit
+linkedin extension listen --dry-run       # observe without writing config
+```
+**Parameters:**
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `port` | number | no | `8787` | Localhost port to listen on |
+| `seconds` | number | no | — | Stop automatically after N seconds |
+| `once` | boolean | no | `false` | Stop after the first captured session |
+| `validate` | boolean | no | `false` | Verify each session against `/me` before accepting |
+| `dry_run` | boolean | no | `false` | Report captures without writing `config.json` |
+
+**Returns:** `status` (`stopped`), `reason` (`signal`/`timeout`/`once`), `port`, `sessions_received`, `saved`, `config`
+
+---
+
+#### `extension_status`
+Check whether the extension bridge is connected (pinged within the last 10 seconds) and ready to proxy requests.
+```bash
+linkedin extension status
+```
+**Parameters:** None
+
+**Returns:** `connected`, `status` (`connected`/`disconnected`), `message`, `proxyPort`, plus `troubleshooting[]` when disconnected
 
 ---
 

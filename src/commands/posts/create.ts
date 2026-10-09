@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { readFile, access } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import type { CommandDefinition, LinkedInClient } from '../../core/types.js';
-import { generateTrackingId } from '../../core/client.js';
 
 export const postsCreateCommand: CommandDefinition = {
   name: 'posts_create',
@@ -39,7 +38,7 @@ export const postsCreateCommand: CommandDefinition = {
       none: 'NONE',
     };
 
-    let mediaItems: any[] = [];
+    const mediaItems: any[] = [];
 
     // Upload image if provided
     if (input.image) {

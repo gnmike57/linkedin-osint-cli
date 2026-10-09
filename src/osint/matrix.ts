@@ -7,11 +7,7 @@
  * (divisions format) or any people JSON/CSV (classified on the fly).
  */
 
-import {
-  classifyTitle,
-  getHierarchyOrder,
-  HIERARCHY_LEVELS,
-} from './classify.js';
+import { classifyTitle } from './classify.js';
 import { getDivisionColor, peopleFromJson, type Person } from './orgchart.js';
 
 export const TIER_GROUPS = [
