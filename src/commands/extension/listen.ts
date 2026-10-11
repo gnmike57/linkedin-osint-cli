@@ -90,9 +90,11 @@ export const extensionListenCommand: CommandDefinition = {
       onStatus: (m) => log(`[bridge] ${m}`),
       onCapture: async (cap) => {
         received += 1;
-        const summary = `session #${received} · cookies=${cap.cookieHeader
-          .split(';')
-          .length} · query_id=${cap.queryId ?? 'not captured (open a People search in LinkedIn)'}`;
+        const ops = (cap.voyagerOps ?? []).map((op) => op.split('@')[0]);
+        const summary =
+          `session #${received} · cookies=${cap.cookieHeader.split(';').length} · ` +
+          `query_id=${cap.queryId ?? 'not captured'} · ` +
+          `voyager_ops=[${ops.join(', ')}]`;
         if (opts.dry_run) {
           log(`[bridge] ${summary} — dry run, not saved`);
         } else {
@@ -108,6 +110,20 @@ export const extensionListenCommand: CommandDefinition = {
             ...(cap.queryId ? { query_id: cap.queryId } : {}),
           });
           log(`[bridge] ${summary} — saved to ~/.linkedin-cli/config.json`);
+
+          // Also record the capture in the multi-account registry, keyed by a
+          // fingerprint of li_at — several accounts can auto-send
+          // concurrently without overwriting each other, and commands can pin
+          // one with LINKEDIN_SESSION=<fingerprint|latest>.
+          const { saveRegisteredSession } = await import('../../core/sessions.js');
+          const registered = saveRegisteredSession({
+            liAt: cap.liAt,
+            jsessionid: cap.jsessionid,
+            cookieHeader: cap.cookieHeader,
+            queryId: cap.queryId,
+            source: 'browser-extension',
+          });
+          log(`[bridge] registry: ${registered.fingerprint} (#${registered.captures})`);
         }
         firstCaptureDone?.();
       },

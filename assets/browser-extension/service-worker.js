@@ -83,10 +83,15 @@ async function captureAndSend() {
   }
   const cookie_header = Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ');
   let query_id;
+  let voyager_ops;
   try {
-    ({ srpQueryId: query_id } = await chrome.storage.local.get('srpQueryId'));
+    ({ srpQueryId: query_id, voyagerOps: voyager_ops } = await chrome.storage.local.get([
+      'srpQueryId',
+      'voyagerOps',
+    ]));
   } catch {
     query_id = undefined;
+    voyager_ops = undefined;
   }
   try {
     const res = await fetch(BRIDGE_URL, {
@@ -98,6 +103,7 @@ async function captureAndSend() {
         cookie_header,
         cookies: jar,
         query_id: query_id || undefined,
+        voyager_ops: voyager_ops || undefined,
       }),
     });
     return { ok: res.ok, status: res.status };
@@ -205,35 +211,74 @@ chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.5 });
 // and includes it with the next auto-send, so the CLI stops 400-ing.
 // Match both call styles LinkedIn uses — `?queryId=<id>` and the older
 // `.../graphql/<id>` path form — we only need the current hash either way.
-const SRP_RE = /voyagerSearchDashClusters\.[a-f0-9]{8,}/;
+const PEOPLE_SEARCH_RE = /voyagerSearchDashClusters\.[a-f0-9]{8,}/;
+// Any Voyager operation id: `voyager<Something>Dash<Something>.<hash>`. Capturing
+// the whole family (not just the people-search name) means a renamed or moved
+// search operation is still recorded — and the popup can show what was seen.
+const VOYAGER_ID_RE = /voyager[A-Za-z]*Dash[A-Za-z]*\.[a-f0-9]{16,}/g;
 
-/** The queryId from a request URL, or from a POST body (newer builds). */
-function srpQueryIdFrom(details) {
-  const fromUrl = details.url && details.url.match(SRP_RE);
-  if (fromUrl) return fromUrl[0];
-
+/** Every Voyager operation id in a request URL or its POST body. */
+function voyagerIdsFrom(details) {
+  const sources = [details.url ?? ''];
   const raw = details.requestBody && details.requestBody.raw && details.requestBody.raw[0];
   if (raw && raw.bytes) {
     try {
-      const fromBody = new TextDecoder().decode(raw.bytes).match(SRP_RE);
-      if (fromBody) return fromBody[0];
+      sources.push(new TextDecoder().decode(raw.bytes));
     } catch {
       /* undecodable body — ignore */
     }
   }
-  return null;
+
+  const ids = new Set();
+  for (const source of sources) {
+    for (const id of source.match(VOYAGER_ID_RE) ?? []) ids.add(id);
+  }
+  return [...ids];
 }
 
 chrome.webRequest.onBeforeRequest.addListener(
-  (details) => {
+  async (details) => {
     // Ignore requests that are not tied to a real tab. This matters: the API
     // proxy makes Voyager calls from *this service worker* (tabId -1) on the
     // CLI's behalf — observing those would feed the CLI's own (possibly stale)
     // queryId straight back into the cache. Only genuine page loads count,
     // i.e. the user's browsing or our own captureQueryIdViaTab() tab.
     if (details.tabId < 0) return;
-    const queryId = srpQueryIdFrom(details);
-    if (queryId) chrome.storage.local.set({ srpQueryId: queryId, srpQueryIdAt: Date.now() });
+    const ids = voyagerIdsFrom(details);
+    if (ids.length === 0) return;
+
+    const now = Date.now();
+    const peopleSearch = ids.find((id) => PEOPLE_SEARCH_RE.test(id));
+
+    // Accumulate "operation name @ last seen" instead of replacing the list:
+    // the feed polls constantly and would otherwise overwrite a one-off search
+    // call before the next auto-send reads it.
+    let seen = [];
+    try {
+      ({ voyagerOps: seen = [] } = await chrome.storage.local.get('voyagerOps'));
+    } catch {
+      seen = [];
+    }
+    const byName = new Map(seen.map((entry) => [String(entry).split('@')[0], String(entry)]));
+    for (const id of ids) {
+      const name = id.split('.')[0];
+      byName.set(name, `${name}@${now}`);
+    }
+
+    const patch = { voyagerOps: [...byName.values()].slice(-40) };
+    // ONLY a genuine people-search observation may mark the hash as fresh —
+    // refreshing this on every Voyager call (a feed poll, say) makes
+    // autoSendCycle() believe a valid hash is cached and skip re-capturing.
+    if (peopleSearch) {
+      patch.srpQueryId = peopleSearch;
+      patch.srpQueryIdAt = now;
+    }
+    // A single set() so the map and the people-search id never disagree.
+    try {
+      await chrome.storage.local.set(patch);
+    } catch {
+      /* storage is best-effort */
+    }
   },
   // `voyager/api/*` rather than just `/graphql`: the SRP call has moved paths
   // across builds, and the id regex above is what actually discriminates. The

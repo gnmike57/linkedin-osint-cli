@@ -12,6 +12,22 @@ export function wantsFromChrome(flags?: AuthFlags): boolean {
 }
 
 export async function resolveAuth(flags?: AuthFlags): Promise<LinkedInAuth> {
+  // Explicit multi-account pin: LINKEDIN_SESSION=<fingerprint|latest> selects a
+  // session from the registry (~/.linkedin-cli/sessions/). Highest priority —
+  // it is the most specific instruction about WHICH account to act as.
+  const selector = process.env.LINKEDIN_SESSION;
+  if (selector) {
+    const { loadRegisteredSession, registeredSessionToAuth } = await import('./sessions.js');
+    const session = loadRegisteredSession(selector);
+    if (!session) {
+      throw new AuthError(
+        `No registered session matches LINKEDIN_SESSION='${selector}'. ` +
+          'Captures arrive automatically via `linkedin extension listen`.',
+      );
+    }
+    return registeredSessionToAuth(session);
+  }
+
   // Priority: --from-chrome / LINKEDIN_FROM_CHROME > CLI flags > env vars > config file
   if (wantsFromChrome(flags)) {
     const profile = flags?.chromeProfile ?? process.env.LINKEDIN_CHROME_PROFILE ?? 'Default';

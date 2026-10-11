@@ -43,10 +43,22 @@ describe('normalizeExtensionPayload', () => {
       li_at: 'LI',
       jsessionid: 'ajax:1',
       query_id: 'voyagerSearchDashClusters.abc123',
+      voyager_ops: [
+        'voyagerSearchDashClusters@1696000000000',
+        'voyagerIdentityDashProfiles@1696000000001',
+        '',
+      ],
     });
     expect(withId!.queryId).toBe('voyagerSearchDashClusters.abc123');
+    // The observed-operation list is a diagnostic; junk entries are dropped.
+    expect(withId!.voyagerOps).toEqual([
+      'voyagerSearchDashClusters@1696000000000',
+      'voyagerIdentityDashProfiles@1696000000001',
+    ]);
+
     const withoutId = normalizeExtensionPayload({ li_at: 'LI', jsessionid: 'ajax:1' });
     expect(withoutId!.queryId).toBeUndefined();
+    expect(withoutId!.voyagerOps).toBeUndefined();
   });
 
   it('returns null when the session is incomplete', () => {

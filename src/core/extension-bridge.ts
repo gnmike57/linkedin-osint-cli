@@ -29,6 +29,12 @@ export interface ExtensionCaptureResult {
   cookieHeader: string;
   /** Current people-search queryId, if the extension observed one. */
   queryId?: string;
+  /**
+   * Voyager operation NAMES the extension has seen from a real tab, newest
+   * last, as `name@timestamp` (e.g. `voyagerSearchDashClusters@1696…`).
+   * Diagnostic: reveals the operation LinkedIn currently uses for a search.
+   */
+  voyagerOps?: string[];
 }
 
 interface CapturePayload {
@@ -36,6 +42,9 @@ interface CapturePayload {
   jsessionid?: string;
   cookie_header?: string;
   query_id?: string;
+  voyager_ops?: string[];
+  /** Legacy key name for `voyager_ops` — an older loaded worker still sends it. */
+  voyager_ids?: string[];
   cookies?: Array<{ name?: string; value?: string }> | Record<string, string>;
 }
 
@@ -68,8 +77,14 @@ export function normalizeExtensionPayload(payload: unknown): ExtensionCaptureRes
     : `JSESSIONID="${jsessionid.replace(/"/g, '')}"; li_at=${liAt}`;
 
   const queryId = typeof p.query_id === 'string' && p.query_id ? p.query_id : undefined;
+  // Accept both key names: the worker currently loaded in the browser may have
+  // been built before this field was renamed.
+  const ops = p.voyager_ops ?? p.voyager_ids;
+  const voyagerOps = Array.isArray(ops)
+    ? ops.filter((op): op is string => typeof op === 'string' && op.length > 0)
+    : undefined;
 
-  return { liAt, jsessionid, cookieHeader, queryId };
+  return { liAt, jsessionid, cookieHeader, queryId, voyagerOps };
 }
 
 async function validateSession(result: ExtensionCaptureResult): Promise<boolean> {
