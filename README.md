@@ -397,6 +397,21 @@ linkedin jobs skills <job-id>                # Skill match insights
 linkedin analytics profile-views             # Who viewed your profile
 ```
 
+### Extension (3 commands)
+
+Companion MV3 browser extension (`assets/browser-extension/`) — the session
+bridge and the real-browser request transport. See `linkedin extension install`.
+
+```bash
+linkedin extension install                   # Copy the bundled extension + print "Load unpacked" steps
+linkedin extension listen                    # Keep the session bridge up (auto-send target; Ctrl+C to stop)
+linkedin extension status                    # Is the bridge connected and ready to proxy?
+```
+
+`install` supports `--browser chrome|edge` and `--out-dir <dir>` (default
+`~/.linkedin-cli/browser-extension`); `listen` supports `--port`, `--seconds`,
+`--once`, `--validate` and `--dry-run`.
+
 ## Global Options
 
 Every command supports these flags:
@@ -430,11 +445,35 @@ export LINKEDIN_HTTP=extension
 # Opt-in: read the full LinkedIn cookie jar from Chrome
 export LINKEDIN_FROM_CHROME=1
 # export LINKEDIN_CHROME_PROFILE="Profile 1"
+
+# Pin one invocation to a specific account in the multi-account registry
+export LINKEDIN_SESSION=<fingerprint|latest>
 ```
 
-Auth resolution order: `--from-chrome` / `LINKEDIN_FROM_CHROME` → `--li-at`/`--jsessionid` flags → env vars → `~/.linkedin-cli/config.json`
+Auth resolution order: `LINKEDIN_SESSION` (multi-account registry) → `--from-chrome` / `LINKEDIN_FROM_CHROME` → `--li-at`/`--jsessionid` flags → env vars → `~/.linkedin-cli/config.json`
 
 `linkedin status --verify` now classifies LinkedIn 3xx login/challenge redirects as `session_valid: false` with an auth message instead of a generic network error.
+
+### Multiple accounts
+
+`config.json` stores one *active* session, and every capture the extension bridge
+receives is **also** recorded in a per-account registry under
+`~/.linkedin-cli/sessions/<fingerprint>.json` (0600, like `config.json`). The
+fingerprint is a SHA-1 prefix of `li_at`, so several accounts can auto-send from
+their own browser profiles at the same time without overwriting each other.
+
+```bash
+# Act as the most recently captured account
+LINKEDIN_SESSION=latest linkedin profile me
+
+# Act as one specific account (exact fingerprint, or any unique prefix)
+LINKEDIN_SESSION=3f9a1c04 linkedin osint employees acme-corp
+```
+
+The registry is populated by `linkedin extension listen` / `linkedin login
+--extension`; there is no CLI subcommand for it, and `LINKEDIN_SESSION` wins over
+every other auth source (an unknown selector fails with
+`No registered session matches LINKEDIN_SESSION='…'`).
 
 ## MCP Server (AI Agents)
 

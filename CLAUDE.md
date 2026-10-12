@@ -1,6 +1,6 @@
-# linkedin-cli
+# linkedin-osint-cli
 
-CLI and MCP server for LinkedIn — full platform management via cookie session auth (Voyager API).
+CLI and MCP server for LinkedIn — full platform management via cookie session auth (Voyager API), plus a 13-command OSINT suite and an interactive shell (palette + offline NLP grammar).
 
 ## Architecture
 
@@ -15,8 +15,11 @@ src/
 │   ├── client.ts         # HTTP client (Voyager API, cookie auth, retry)
 │   ├── transport.ts      # Pluggable transport (fetch / curl-impersonate)
 │   ├── redirects.ts      # 3xx classification (auth/challenge walls)
-│   ├── auth.ts           # resolveAuth() — chrome > flags > env > config file
+│   ├── auth.ts           # resolveAuth() — LINKEDIN_SESSION > chrome > flags > env > config
 │   ├── chrome-cookies.ts # Chrome cookie-store decryption (local only)
+│   ├── cdp-cookies.ts    # live DevTools-Protocol capture (tool-owned profile)
+│   ├── extension-bridge.ts # localhost session listener + request poll-proxy
+│   ├── sessions.ts       # multi-account registry (~/.linkedin-cli/sessions/)
 │   ├── config.ts         # ~/.linkedin-cli/config.json manager
 │   ├── errors.ts         # Typed error classes
 │   ├── handler.ts        # executeCommand() — builds requests from definitions
@@ -35,6 +38,7 @@ src/
 │   ├── companies/        # 3 company commands
 │   ├── jobs/jobs.ts      # 2 job commands
 │   ├── analytics/        # 1 analytics command
+│   ├── extension/        # 3 extension commands (install, listen, status)
 │   └── osint/            # 13 OSINT commands (see below)
 │       ├── index.ts      # osintCommands registry
 │       ├── util.ts       # file output helpers + company-ID resolution
@@ -55,12 +59,24 @@ src/
 │   ├── matrix.ts         # HTML matrix generator
 │   ├── delve.ts          # Outlook/Delve email lookup
 │   └── stats.ts          # Classification stats + override suggestions
-└── mcp/
-    └── server.ts         # MCP server registration loop
+├── mcp/
+│   └── server.ts         # MCP server registration loop
+└── interactive/          # Shell REPL: palette + offline NLP grammar
+    ├── launcher.ts       # entry (TTY detection; bare `linkedin` / `menu` / `shell`)
+    ├── shell.ts          # REPL loop, confirm-first staging, builtins
+    ├── catalog.ts        # command catalog shared by the palette + NLP
+    ├── nlp.ts            # deterministic phrase → command resolver (offline)
+    ├── nlp-synonyms.ts   # synonym/alias tables for the NLP layer
+    ├── completer.ts      # tab completion (builtins/groups/commands/flags)
+    ├── history.ts        # ~/.linkedin-cli/history, credentials redacted
+    ├── banner.ts  colors.ts  readline-prompts.ts  # banner, ANSI, prompt fallback
+    └── (no runtime deps beyond node:readline + the existing catalog/Zod/colors)
 ```
 
-Plus `assets/org_chart_viewer.html` (interactive viewer) and
+Plus `assets/org_chart_viewer.html` (interactive viewer),
+`assets/browser-extension/` (MV3 session bridge, shipped to npm) and
 `legacy/python/` (the three original projects, archived intact).
+Design specs/plans live in `docs/superpowers/`.
 
 ## Authentication
 
@@ -68,7 +84,19 @@ Cookie-based auth via LinkedIn's Voyager API. Two cookies required:
 - `li_at` — main session token
 - `JSESSIONID` — session ID (used for CSRF token)
 
-**Resolution order**: `--li-at`/`--jsessionid` flags → `LINKEDIN_LI_AT`/`LINKEDIN_JSESSIONID` env vars → `~/.linkedin-cli/config.json`
+**Resolution order**: `LINKEDIN_SESSION` (multi-account registry) → `--from-chrome` / `LINKEDIN_FROM_CHROME` → `--li-at`/`--jsessionid` flags → `LINKEDIN_LI_AT`/`LINKEDIN_JSESSIONID` env vars → `~/.linkedin-cli/config.json`
+
+**Multi-account registry**: `config.json` holds one active session; every
+extension-bridge capture is *also* written to
+`~/.linkedin-cli/sessions/<sha1(li_at)[0:16]>.json` (0600), so several accounts
+can auto-send concurrently. `LINKEDIN_SESSION=<fingerprint|latest>` pins one
+invocation to one account (unique prefix accepted). There is no CLI subcommand
+for the registry — it is populated by the extension bridge only.
+
+Login capture paths (`login --browser` over CDP, `login --extension`, manual
+paste) and the mid-run 401 refresh all persist through the canonical
+`saveSession()` in `core/config.ts`, which keeps the sticky metadata
+(`profile_name`, `profile_urn`, `query_id`) that a partial write would drop.
 
 ## Tech Stack
 
@@ -120,6 +148,6 @@ All Voyager API calls go to `https://www.linkedin.com/voyager/api`. The client h
 
 - All output is JSON to stdout (compact by default, `--pretty` for indented)
 - Errors go to stderr as JSON `{error, code}`
-- No interactive prompts in API commands — only the `menu` console and `login` prompt. `@inquirer/prompts` is an optional dependency; the console falls back to a built-in `node:readline` implementation when it is unavailable.
+- No interactive prompts in API commands — only the shell/palette console and `login` prompt. `@inquirer/prompts` is an optional dependency; the console falls back to a built-in `node:readline` implementation when it is unavailable (`LINKEDIN_UI=classic` keeps the palette-only UI, `LINKEDIN_SHELL=plain` forces the non-TTY grammar).
 - Path parameters use `{field}` template syntax in endpoint paths
 - CLI flags are kebab-case, input fields are snake_case

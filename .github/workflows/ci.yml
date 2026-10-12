@@ -18,7 +18,7 @@ jobs:
         node: [18, 20, 22]
         include:
           # Cross-platform check: the CLI has Windows-specific path and
-          # filename handling, and the console smoke test drives stdin.
+          # filename handling, and the console/shell smoke tests drive stdin.
           - os: windows-latest
             node: 20
     steps:
@@ -34,6 +34,9 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -48,3 +51,6 @@ jobs:
 
       - name: Smoke test — interactive console
         run: npm run smoke:menu
+
+      - name: Smoke test — interactive shell
+        run: npm run smoke:shell

@@ -1,7 +1,7 @@
 {
   "name": "@bcharleson/linkedincli",
   "version": "0.2.0",
-  "description": "CLI and MCP server for LinkedIn — 45 platform commands plus an OSINT suite (company discovery, employee scraping, username generation, role classification, org charts). Cookie session auth, AI agent native.",
+  "description": "CLI and MCP server for LinkedIn — 46 platform commands plus a 13-command OSINT suite (company discovery, employee scraping, username generation, role classification, org charts). Interactive shell, cookie-session auth, AI agent native.",
   "type": "module",
   "bin": {
     "linkedin": "./dist/index.js"
@@ -70,6 +70,9 @@
     "linkedin-automation",
     "cookie-auth",
     "social-media",
+    "osint",
+    "reconnaissance",
+    "org-chart",
     "messaging",
     "connections",
     "posts",

@@ -24,6 +24,7 @@ LINKEDIN_CURL_IMPERSONATE_BIN=...    # override curl-impersonate binary path
 LINKEDIN_FROM_CHROME=1               # read cookies from a local Chrome profile
 LINKEDIN_CHROME_PROFILE=Default      # Chrome profile directory name
 LINKEDIN_EXTENSION_PROXY_PORT=8788   # extension proxy server port (default 8788)
+LINKEDIN_SESSION=latest              # pin this invocation to one account in the multi-account registry
 ```
 
 CLI equivalents: `--from-chrome`, `--chrome-profile <name>`. These read the local Chrome/Edge profile and must not be used from a remote runner.
@@ -40,6 +41,18 @@ linkedin status --verify     # check if the session is valid
 app-bound (`v11`/`v20`, the default on current Chrome/Edge), and the client
 transparently re-captures from the persistent profile and retries once on a
 mid-run `401` (so long multi-call scrapes survive an expired token).
+
+**Multiple accounts.** `~/.linkedin-cli/config.json` holds one *active* session,
+and every capture the extension bridge receives is **also** recorded in a
+per-account registry under `~/.linkedin-cli/sessions/<fingerprint>.json`
+(created 0600, like `config.json`). The fingerprint is a SHA-1 prefix of `li_at`,
+so several accounts can auto-send from their own browser profiles at the same
+time without overwriting each other. `LINKEDIN_SESSION=<fingerprint|latest>`
+pins one invocation to one account and short-circuits the whole resolution
+order — it is the *highest* priority source (a unique fingerprint prefix is
+accepted). There is no CLI subcommand for the registry; it is populated by
+`linkedin extension listen` / `login --extension`, and selectable only through
+that env var.
 
 ---
 

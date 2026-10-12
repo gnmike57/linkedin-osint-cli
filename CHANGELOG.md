@@ -3,8 +3,20 @@
 All notable changes to this project are documented here. Releases are tagged on
 `master`; each entry mirrors the corresponding GitHub release.
 
-## [Unreleased] — interactive shell with local NLP
+## [Unreleased] — multi-account sessions, browser-extension bridge, interactive shell
 
+- **Multi-account session registry + `LINKEDIN_SESSION` selector** — every
+  extension-bridge capture is now *also* recorded in
+  `~/.linkedin-cli/sessions/<fingerprint>.json` (0600, like `config.json`),
+  keyed by a SHA-1 prefix of `li_at`. Since `config.json` still holds exactly one
+  *active* session, this lets several accounts auto-send from their own browser
+  profiles concurrently without overwriting each other.
+  `LINKEDIN_SESSION=<fingerprint|latest>` pins a single invocation to one account
+  (a unique fingerprint prefix is accepted) and outranks every other auth
+  source — it is the most specific instruction about *which* account to act as.
+  There is no CLI subcommand for the registry; it is populated by the extension
+  bridge only, and an unknown selector fails loudly instead of silently using a
+  different account.
 - **Always-on extension bridge (`linkedin extension listen`)** — a long-running
   localhost listener (default `127.0.0.1:8787`) that accepts a session at *any*
   moment and persists each capture to `~/.linkedin-cli/config.json`. This fixes
@@ -121,6 +133,13 @@ All notable changes to this project are documented here. Releases are tagged on
   `LINKEDIN_UI=classic` keeps the palette-only UI; `LINKEDIN_SHELL=plain`
   forces the non-TTY grammar that the new `smoke:shell` script drives.
   Zero new dependencies — `node:readline` + the existing catalog/Zod/colors.
+
+- **Repo hygiene** — CI now runs `npm run lint` and `npm run smoke:shell` (both
+  scripts already existed but were never exercised in the workflow);
+  `package.json`'s description/keywords match the shipped command set (46
+  platform + 13 OSINT = 59 tools); and README / AGENTS.md / CLAUDE.md document
+  the `extension` command group, the multi-account registry and
+  `LINKEDIN_SESSION` instead of only the auth flags.
 
 ## [0.2.0] — interactive console, consolidated OSINT suite, 40-issue bug sweep
 
