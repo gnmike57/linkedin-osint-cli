@@ -1,5 +1,5 @@
 {
-  "name": "@bcharleson/linkedincli",
+  "name": "@gnmike57/linkedin-osint-cli",
   "version": "0.2.0",
   "description": "CLI and MCP server for LinkedIn — 46 platform commands plus a 13-command OSINT suite (company discovery, employee scraping, username generation, role classification, org charts). Interactive shell, cookie-session auth, AI agent native.",
   "type": "module",

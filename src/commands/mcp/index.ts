@@ -17,7 +17,7 @@ Local Claude Code / Cursor / Windsurf config:
     "mcpServers": {
       "linkedin": {
         "command": "npx",
-        "args": ["-y", "@bcharleson/linkedincli", "mcp"],
+        "args": ["-y", "@gnmike57/linkedin-osint-cli", "mcp"],
         "env": {
           "LINKEDIN_LI_AT": "your_li_at_cookie",
           "LINKEDIN_JSESSIONID": "your_jsessionid_cookie",

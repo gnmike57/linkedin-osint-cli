@@ -134,12 +134,16 @@ All notable changes to this project are documented here. Releases are tagged on
   forces the non-TTY grammar that the new `smoke:shell` script drives.
   Zero new dependencies — `node:readline` + the existing catalog/Zod/colors.
 
-- **Repo hygiene** — CI now runs `npm run lint` and `npm run smoke:shell` (both
-  scripts already existed but were never exercised in the workflow);
+- **Repo hygiene** — the package is now `@gnmike57/linkedin-osint-cli` (it still
+  carried the upstream `@bcharleson/linkedincli` name after the repo rename, in
+  `package.json`, `package-lock.json`, the README and the `linkedin mcp` config
+  snippet); CI now runs `npm run lint` and `npm run smoke:shell` (both scripts
+  already existed but were never exercised in the workflow);
   `package.json`'s description/keywords match the shipped command set (46
   platform + 13 OSINT = 59 tools); and README / AGENTS.md / CLAUDE.md document
   the `extension` command group, the multi-account registry and
-  `LINKEDIN_SESSION` instead of only the auth flags.
+  `LINKEDIN_SESSION` instead of only the auth flags. The two issue links that
+  point at the upstream repo are now labelled as upstream citations.
 
 ## [0.2.0] — interactive console, consolidated OSINT suite, 40-issue bug sweep
 

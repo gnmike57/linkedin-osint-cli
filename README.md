@@ -69,7 +69,7 @@ implementation, so a restricted registry or a partial install never blocks you.
 Force either path with `LINKEDIN_PROMPTS=inquirer` (require it, fail loudly) or
 `LINKEDIN_PROMPTS=fallback` (always use the built-in console).
 
-> **Note:** The npm package is `@bcharleson/linkedincli` but the CLI command is just **`linkedin`**.
+> **Note:** The package is `@gnmike57/linkedin-osint-cli`, but the CLI command is just **`linkedin`**.
 
 ## Local harness only
 
@@ -86,7 +86,7 @@ The opt-in `--from-chrome` and `LINKEDIN_HTTP=curl-impersonate` paths are **loca
 
 ## Sessions keep getting killed?
 
-Default Node `fetch` has a TLS/JA3 fingerprint that is not Chrome. LinkedIn often detects that and **invalidates `li_at` on the first Voyager call** (issue [#1](https://github.com/bcharleson/linkedincli/issues/1)). Manual `li_at` + `JSESSIONID` paste still works for some accounts, but is the fragile path.
+Default Node `fetch` has a TLS/JA3 fingerprint that is not Chrome. LinkedIn often detects that and **invalidates `li_at` on the first Voyager call** (confirmed upstream in [bcharleson/linkedincli#1](https://github.com/bcharleson/linkedincli/issues/1) — *"yeah this instantly logs me out"*). Manual `li_at` + `JSESSIONID` paste still works for some accounts, but is the fragile path.
 
 Three **opt-in, local-only** workarounds (default transport remains Node `fetch`):
 
@@ -526,7 +526,7 @@ linkedin login --from-chrome
 
 ## Search posts limitation
 
-`linkedin search posts` is **not available**. LinkedIn's CONTENT resultType on `voyagerSearchDashClusters.b0928897b71bd00a5a7291755dcd64f0` still returns HTTP 200 but `included[]` is only a `FeedbackCard` (issue [#2](https://github.com/bcharleson/linkedincli/issues/2)). People and company search on the same queryId still work. A replacement content-search `queryId` has not been verified from public/in-repo sources, so this CLI does not invent one.
+`linkedin search posts` is **not available**. LinkedIn's CONTENT resultType on `voyagerSearchDashClusters.b0928897b71bd00a5a7291755dcd64f0` still returns HTTP 200 but `included[]` is only a `FeedbackCard` (upstream report: [bcharleson/linkedincli#2](https://github.com/bcharleson/linkedincli/issues/2)). People and company search on the same queryId still work. A replacement content-search `queryId` has not been verified from public/in-repo sources, so this CLI does not invent one.
 
 For posts **by a specific member**, use `profile posts` (`identity/profileUpdatesV2`):
 
