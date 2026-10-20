@@ -27,3 +27,6 @@ out.txt
 temp.txt
 setup_eslint.bat
 diag-cookies.mjs
+
+# throwaway message drafts (never commit)
+.tmp-*.body
