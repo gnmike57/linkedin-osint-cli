@@ -470,10 +470,18 @@ LINKEDIN_SESSION=latest linkedin profile me
 LINKEDIN_SESSION=3f9a1c04 linkedin osint employees acme-corp
 ```
 
-The registry is populated by `linkedin extension listen` / `linkedin login
---extension`; there is no CLI subcommand for it, and `LINKEDIN_SESSION` wins over
-every other auth source (an unknown selector fails with
-`No registered session matches LINKEDIN_SESSION='…'`).
+`linkedin sessions` lists them — fingerprints and timestamps only, never cookies
+(`--fingerprint <selector>` for one account, `--purge` to forget them all). The
+registry is populated by `linkedin extension listen` / `linkedin login
+--extension`, and `LINKEDIN_SESSION` wins over every other auth source (an unknown
+selector fails with `No registered session matches LINKEDIN_SESSION='…'`).
+
+> **`~/.linkedin-cli/` keeps its pre-rename name on purpose.** It is the on-disk
+> identity for `config.json`, `sessions/`, `history`, `browser-profile` and the
+> installed `browser-extension/`. Renaming it would orphan existing logins and
+> risk leaving a *second* copy of the loaded extension behind (two bridges
+> re-sending competing `queryId`s). What changed with the rename is the CLI
+> command (`linkedin`) and the package name.
 
 ## MCP Server (AI Agents)
 

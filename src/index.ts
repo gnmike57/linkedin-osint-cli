@@ -11,7 +11,9 @@ const program = new Command();
 
 program
   .name('linkedin')
-  .description('CLI and MCP server for LinkedIn — full platform management via cookie session auth')
+  .description(
+    'LinkedIn CLI + MCP server — platform commands (profiles, posts, messaging, search) and an OSINT suite, with an interactive shell',
+  )
   .version(pkg.version)
   .option('--li-at <cookie>', 'li_at cookie (overrides LINKEDIN_LI_AT env var and stored config)')
   .option('--jsessionid <cookie>', 'JSESSIONID cookie (overrides LINKEDIN_JSESSIONID env var and stored config)')

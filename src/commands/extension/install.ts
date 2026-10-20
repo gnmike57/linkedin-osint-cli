@@ -104,7 +104,7 @@ export const extensionInstallCommand: CommandDefinition = {
         '2. Enable "Developer mode" (top right)',
         '3. Click "Load unpacked"',
         `4. Select this folder: ${destination}`,
-        '5. Pin the "LinkedIn CLI" extension to the toolbar',
+        '5. Pin the extension to the toolbar (it lists as "LinkedIn OSINT CLI Session Bridge")',
         '6. Click it and press "Send session to CLI" — or leave it: it auto-sends every ~60s',
         '',
         'Keep the bridge up (recommended — accepts a session any time):',

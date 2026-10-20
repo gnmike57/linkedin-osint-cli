@@ -10,7 +10,7 @@ export function bannerLines(version: string): string[] {
     '  ███████╗██║██║ ╚████║██║  ██╗███████╗██████╔╝██║██║ ╚████║',
     '  ╚══════╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝╚═════╝ ╚═╝╚═╝  ╚═══╝',
     '',
-    `         linkedin-cli  ·  v${version}  ·  interactive console`,
+    `   linkedin-osint-cli  ·  v${version}  ·  interactive console`,
     '',
   ];
 }

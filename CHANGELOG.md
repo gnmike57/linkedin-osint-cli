@@ -145,6 +145,39 @@ All notable changes to this project are documented here. Releases are tagged on
   `LINKEDIN_SESSION` instead of only the auth flags. The two issue links that
   point at the upstream repo are now labelled as upstream citations.
 
+- **CLI polish** — group headings in `linkedin --help` now use the same labels as
+  the interactive console (`OSINT toolkit · 13 commands` instead of
+  `Manage osint`, `Browser Extension · 3 commands`, singular-aware counts), read
+  from the palette's own label table so help and console can no longer drift
+  apart. The root help line names the real scope (platform commands + OSINT suite
+  + interactive shell), and the banner / shell header show the current product
+  name (`linkedin-osint-cli`) instead of the pre-rename `linkedin-cli`. Session
+  storage is deliberately untouched, so existing logins keep working.
+
+- **`linkedin sessions`** — the multi-account registry finally has a CLI face:
+  it lists every captured account (fingerprint, source, first/last seen, capture
+  count, whether a full cookie jar and a people-search `queryId` came with it) and
+  marks the one `config.json` currently holds. `--fingerprint <selector>` inspects
+  a single account; `--purge` forgets them all while leaving the active session
+  alone, so cleaning up can never log you out. The payload is credential-free by
+  construction — never `li_at`, `JSESSIONID` or the stored jar — and it is
+  CLI-only, so no agent gets a session inventory as an MCP tool. It is reachable
+  from the interactive shell too: `sessions` is a builtin there (`--fingerprint` /
+  `--purge` forward through) and the palette's Session menu lists it alongside
+  login/status/logout.
+- **Extension rebrand + line-ending hygiene** — the companion extension now
+  identifies as **"LinkedIn OSINT CLI Session Bridge"** (manifest name and
+  toolbar title, popup heading, `linkedin extension install` steps) so it matches
+  the product name in `chrome://extensions`. The repo also gains a
+  `.gitattributes` (`* text=auto eol=lf`, CRLF for `.bat`/`.cmd`, binaries
+  untouched): with `core.autocrlf=true` and no attributes, the same file could be
+  CRLF in the working copy and LF in the index, which caused the stray
+  "LF will be replaced by CRLF" warnings and mixed-ending files during the rename
+  work. `~/.linkedin-cli/` keeps its pre-rename name deliberately — it is the
+  stable on-disk identity (config, sessions, history, browser-profile, installed
+  extension), and renaming it would orphan existing logins and risk leaving a
+  second copy of the loaded extension behind.
+
 ## [0.2.0] — interactive console, consolidated OSINT suite, 40-issue bug sweep
 
 Full LinkedIn platform management from the terminal — 43 platform commands

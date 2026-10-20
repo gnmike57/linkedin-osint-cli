@@ -1,5 +1,8 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Pluggable HTTP transport. Defaults to global `fetch` (Node), but can
@@ -354,31 +357,68 @@ export function useCurlImpersonate(): boolean {
   );
 }
 
-const CURL_BIN = process.env.LINKEDIN_CURL_IMPERSONATE_BIN ?? 'curl_chrome123';
+/**
+ * Locate the curl-impersonate binary, in priority order:
+ *   1. `LINKEDIN_CURL_IMPERSONATE_BIN` — but only if that file actually exists
+ *      (stale absolute paths after a repo move must not hard-fail every call);
+ *   2. the repo-bundled copy under `.tmp/curl-impersonate/`;
+ *   3. the env value verbatim / the classic `curl_chrome123` PATH default.
+ */
+function resolveCurlBin(): string {
+  const fromEnv = process.env.LINKEDIN_CURL_IMPERSONATE_BIN;
+  if (fromEnv && existsSync(fromEnv)) return fromEnv;
+  const here = dirname(dirname(fileURLToPath(import.meta.url))); // dist/ -> repo root
+  const bundled = join(
+    here,
+    '.tmp',
+    'curl-impersonate',
+    process.platform === 'win32' ? 'curl-impersonate.exe' : 'curl-impersonate',
+  );
+  if (existsSync(bundled)) return bundled;
+  return fromEnv ?? 'curl_chrome123';
+}
 
 /**
  * v2-style curl-impersonate builds ship a single `curl-impersonate` binary
  * plus per-target `.bat` wrappers. Node cannot spawn `.bat`/`.cmd` without a
  * shell (EINVAL on Node >= 18.12), so if CURL_BIN points at one of those
- * wrappers (or at the combined binary itself), transparently redirect to the
- * sibling `curl-impersonate` executable and pass `--impersonate <target>`.
+ * wrappers, transparently redirect to the sibling `curl-impersonate`
+ * executable and pass `--impersonate <target>`. When CURL_BIN *is* the
+ * combined binary, the impersonation target must come from
+ * `LINKEDIN_CURL_IMPERSONATE_TARGET` — previously the stem check nullified
+ * that env var, silently sending plain-curl TLS.
  */
 function curlBinAndArgs(): { bin: string; preArgs: string[] } {
+  const CURL_BIN = resolveCurlBin();
   const base = CURL_BIN.replace(/\\/g, '/').split('/').pop() ?? CURL_BIN;
   const stem = base.replace(/\.(exe|bat|cmd)$/i, '').toLowerCase();
-  const impersonateTarget =
-    process.env.LINKEDIN_CURL_IMPERSONATE_TARGET ??
-    (/^curl_(chrome|edge|firefox|safari|tor)\w*$/.test(stem) ? stem.replace(/^curl_/, '') : null);
-  if (!impersonateTarget || stem === 'curl-impersonate') {
-    return { bin: CURL_BIN, preArgs: [] };
+  const envTarget = process.env.LINKEDIN_CURL_IMPERSONATE_TARGET;
+  const stemTarget = /^curl_(chrome|edge|firefox|safari|tor)\w*$/.test(stem)
+    ? stem.replace(/^curl_/, '')
+    : null;
+  const impersonateTarget = envTarget ?? stemTarget;
+
+  // Wrapper stem (curl_chrome123.bat): redirect to the sibling combined
+  // binary and pass the derived target (env target wins when both exist).
+  if (stemTarget && stem !== 'curl-impersonate') {
+    const dir = CURL_BIN.slice(0, CURL_BIN.length - base.length);
+    const hasTargetSuffix = /(_android|_ios|a)$/i.test(stem);
+    const exe = dir + 'curl-impersonate' + (process.platform === 'win32' ? '.exe' : '');
+    const target: string = impersonateTarget ?? stemTarget;
+    return {
+      bin: exe,
+      preArgs: ['--impersonate', hasTargetSuffix ? stemTarget : target],
+    };
   }
-  const dir = CURL_BIN.slice(0, CURL_BIN.length - base.length);
-  const hasTargetSuffix = /(_android|_ios|a)$/i.test(stem);
-  const exe = dir + 'curl-impersonate' + (process.platform === 'win32' ? '.exe' : '');
-  return {
-    bin: exe,
-    preArgs: ['--impersonate', hasTargetSuffix ? stem.replace(/^curl_/, '') : impersonateTarget],
-  };
+
+  // Combined binary: pass the env target when present; without one there is
+  // nothing to pass (and guessing a profile for a bare binary would be wrong).
+  if (stem === 'curl-impersonate') {
+    return { bin: CURL_BIN, preArgs: impersonateTarget ? ['--impersonate', impersonateTarget] : [] };
+  }
+
+  // Anything else (plain curl, custom binaries): no impersonation.
+  return { bin: CURL_BIN, preArgs: [] };
 }
 
 function curlImpersonateRequest(url: string, init: HttpRequestInit): Promise<HttpResponse> {
@@ -448,7 +488,7 @@ function curlImpersonateRequest(url: string, init: HttpRequestInit): Promise<Htt
       // is still a successful capture of the redirect response if -i printed it.
       const raw = Buffer.concat(chunks);
       if (code !== 0 && raw.length === 0) {
-        reject(new Error(`${CURL_BIN} exited ${code}: ${stderr.trim() || 'no output'}`));
+        reject(new Error(`${bin} exited ${code}: ${stderr.trim() || 'no output'}`));
         return;
       }
       try {
@@ -461,7 +501,7 @@ function curlImpersonateRequest(url: string, init: HttpRequestInit): Promise<Htt
         resolve(parsed);
       } catch (err) {
         if (code !== 0) {
-          reject(new Error(`${CURL_BIN} exited ${code}: ${stderr.trim() || 'unparseable response'}`));
+          reject(new Error(`${bin} exited ${code}: ${stderr.trim() || 'unparseable response'}`));
           return;
         }
         reject(err);

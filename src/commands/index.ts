@@ -4,8 +4,10 @@ import { resolveAuth, refreshSessionFromBrowser } from '../core/auth.js';
 import { createClient } from '../core/client.js';
 import { output, outputError } from '../core/output.js';
 import { registerLoginCommand, registerLogoutCommand, registerStatusCommand } from './auth/login.js';
+import { registerSessionsCommand } from './auth/sessions.js';
 import { registerMcpCommand } from './mcp';
 import { osintCommands } from './osint';
+import { GROUP_META } from '../interactive/catalog.js';
 
 // Import all command groups
 import { profileCommands } from './profile/view.js';
@@ -40,6 +42,7 @@ export function registerAllCommands(program: Command): void {
   registerLoginCommand(program);
   registerLogoutCommand(program);
   registerStatusCommand(program);
+  registerSessionsCommand(program);
   registerMcpCommand(program);
 
   // Group commands by their `group` field
@@ -49,11 +52,16 @@ export function registerAllCommands(program: Command): void {
     groups.get(cmd.group)!.push(cmd);
   }
 
-  // Register each group as a subcommand
+  // Register each group as a subcommand. Group descriptions reuse the palette's
+  // canonical labels (GROUP_META) so `--help` and the interactive console name a
+  // group identically — no more "Manage osint" in one place and "OSINT toolkit"
+  // in the other.
   for (const [groupName, commands] of groups) {
+    const label = GROUP_META[groupName]?.tagline ?? `Manage ${groupName}`;
+    const count = `${commands.length} ${commands.length === 1 ? 'command' : 'commands'}`;
     const groupCmd = program
       .command(groupName)
-      .description(`Manage ${groupName}`);
+      .description(`${label} · ${count}`);
 
     for (const cmdDef of commands) {
       registerCommand(groupCmd, cmdDef);

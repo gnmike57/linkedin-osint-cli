@@ -27,6 +27,7 @@ src/
 ├── commands/
 │   ├── index.ts          # allCommands registry + registerAllCommands() + lazy client
 │   ├── auth/login.ts     # login, logout, status (special commands)
+│   ├── auth/sessions.ts  # sessions — CLI-only registry listing (never prints cookies)
 │   ├── mcp/index.ts      # MCP start command
 │   ├── profile/view.ts   # 9 profile commands
 │   ├── posts/create.ts   # 3 post commands (create, edit, delete)
@@ -90,8 +91,13 @@ Cookie-based auth via LinkedIn's Voyager API. Two cookies required:
 extension-bridge capture is *also* written to
 `~/.linkedin-cli/sessions/<sha1(li_at)[0:16]>.json` (0600), so several accounts
 can auto-send concurrently. `LINKEDIN_SESSION=<fingerprint|latest>` pins one
-invocation to one account (unique prefix accepted). There is no CLI subcommand
-for the registry — it is populated by the extension bridge only.
+invocation to one account (unique prefix accepted). `linkedin sessions` lists the
+registry (credential-free: fingerprints, timestamps, capture counts; `--fingerprint
+<selector>` for one, `--purge` to forget them) and is CLI-only — like
+`login`/`logout`/`status` it is a special command, not an MCP tool. `~/.linkedin-cli/`
+itself is deliberately NOT renamed with the package: it is the stable on-disk
+identity (config, sessions, history, browser-profile, installed extension) and
+moving it would orphan logins and risk a duplicate extension bridge.
 
 Login capture paths (`login --browser` over CDP, `login --extension`, manual
 paste) and the mid-run 401 refresh all persist through the canonical

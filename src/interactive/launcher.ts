@@ -54,6 +54,7 @@ const SESSION_ITEMS: SessionAction[] = [
   { kind: 'session', label: '🔐  Session › login (paste cookies)', args: ['login'] },
   { kind: 'session', label: '🔐  Session › login via Chrome import', args: ['login', '--from-chrome'] },
   { kind: 'session', label: '✅  Session › status --verify', args: ['status', '--verify'] },
+  { kind: 'session', label: '🗂️  Session › sessions (captured accounts)', args: ['sessions'] },
   { kind: 'session', label: '👋  Session › logout (delete stored cookies)', args: ['logout'] },
 ];
 

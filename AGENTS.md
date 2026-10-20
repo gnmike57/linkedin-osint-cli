@@ -50,9 +50,13 @@ so several accounts can auto-send from their own browser profiles at the same
 time without overwriting each other. `LINKEDIN_SESSION=<fingerprint|latest>`
 pins one invocation to one account and short-circuits the whole resolution
 order — it is the *highest* priority source (a unique fingerprint prefix is
-accepted). There is no CLI subcommand for the registry; it is populated by
-`linkedin extension listen` / `login --extension`, and selectable only through
-that env var.
+accepted). `linkedin sessions` lists them (fingerprints, source, first/last seen, capture
+count, whether a full cookie jar and a people-search `queryId` came with it — never
+the cookies themselves; `--fingerprint <selector>` inspects one, `--purge` forgets
+them all and leaves the active `config.json` alone). The registry is populated by
+`linkedin extension listen` / `login --extension` and pinned with that env var.
+It is deliberately **CLI-only** — a session inventory is operator information, so
+it is not exposed as an MCP tool.
 
 ---
 

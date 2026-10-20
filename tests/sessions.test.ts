@@ -12,9 +12,11 @@ process.env.XDG_CONFIG_HOME = sandbox;
 const {
   listRegisteredSessions,
   loadRegisteredSession,
+  purgeRegisteredSessions,
   registeredSessionToAuth,
   saveRegisteredSession,
   sessionFingerprint,
+  summarizeRegisteredSessions,
 } = await import('../src/core/sessions.js');
 
 beforeEach(async () => {
@@ -79,5 +81,72 @@ describe('session registry', () => {
   it('is empty when nothing has been captured', () => {
     expect(listRegisteredSessions()).toEqual([]);
     expect(loadRegisteredSession('latest')).toBeNull();
+  });
+});
+
+describe('session summary (`linkedin sessions`)', () => {
+  it('never carries credentials — fingerprints and metadata only', async () => {
+    // The registry files hold full cookie jars, so the listing is the one place
+    // a careless change could leak them into logs or an issue report.
+    saveRegisteredSession({
+      liAt: ACCOUNT_A,
+      jsessionid: 'a:1',
+      cookieHeader: 'li_at=A; JSESSIONID=a:1',
+      source: 'extension',
+    });
+    saveRegisteredSession({ liAt: ACCOUNT_B, jsessionid: 'b:1' });
+
+    const summaries = summarizeRegisteredSessions(
+      listRegisteredSessions(),
+      sessionFingerprint(ACCOUNT_A),
+    );
+
+    expect(summaries).toHaveLength(2);
+    const serialized = JSON.stringify(summaries);
+    expect(serialized).not.toContain(ACCOUNT_A);
+    expect(serialized).not.toContain(ACCOUNT_B);
+    expect(serialized).not.toContain('a:1');
+    expect(serialized).not.toContain('jsessionid');
+    expect(serialized).not.toContain('cookie_header');
+
+    const active = summaries.filter((s) => s.active);
+    expect(active).toHaveLength(1);
+    expect(active[0].fingerprint).toBe(sessionFingerprint(ACCOUNT_A));
+  });
+
+  it('reports per-account jar, queryId and capture state', async () => {
+    saveRegisteredSession({
+      liAt: ACCOUNT_A,
+      jsessionid: 'a:1',
+      cookieHeader: 'li_at=A; JSESSIONID=a:1',
+      queryId: 'voyagerSearchDashClusters.q1',
+      source: 'extension',
+    });
+
+    const [summary] = summarizeRegisteredSessions(listRegisteredSessions(), undefined);
+    expect(summary.has_jar).toBe(true);
+    expect(summary.captures).toBe(1);
+    expect(summary.query_id).toBe('voyagerSearchDashClusters.q1');
+    expect(summary.source).toBe('extension');
+    expect(summary.first_seen).toBe(summary.last_seen);
+    // No active fingerprint passed in → nothing is marked active.
+    expect(summary.active).toBe(false);
+  });
+
+  it('purges the registry without touching the active config session', async () => {
+    const { loadConfig, saveSession } = await import('../src/core/config.js');
+    await saveSession({ li_at: ACCOUNT_A, jsessionid: 'a:1' }); // the ACTIVE session
+    saveRegisteredSession({ liAt: ACCOUNT_A, jsessionid: 'a:1' });
+    saveRegisteredSession({ liAt: ACCOUNT_B, jsessionid: 'b:1' });
+
+    const result = purgeRegisteredSessions();
+
+    expect(result.removed).toBe(2);
+    expect(result.dir).toContain('sessions');
+    expect(listRegisteredSessions()).toEqual([]);
+    expect(loadRegisteredSession('latest')).toBeNull();
+    // The operator stays logged in — purging only removes the ability to pin a
+    // *different* account with LINKEDIN_SESSION.
+    expect((await loadConfig())?.li_at).toBe(ACCOUNT_A);
   });
 });

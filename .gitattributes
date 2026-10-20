@@ -1,0 +1,20 @@
+# Keep one line-ending convention in the repo.
+#
+# This repo had no attributes while `core.autocrlf=true` was set, so the same
+# file could be CRLF in the working copy and LF in the index — which produced
+# spurious "LF will be replaced by CRLF" warnings and mixed-ending files when a
+# tool rewrote one (both happened during the 2026-10 rename work). Normalising
+# to LF in the repository makes the working copy deterministic.
+* text=auto eol=lf
+
+# Windows shells need CRLF to run reliably.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never touch binaries.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.tar.gz binary

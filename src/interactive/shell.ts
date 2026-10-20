@@ -27,7 +27,7 @@ import { browseByCategory, executeEntry, isBrowseSentinel, execSessionAction } f
 import { exitPromptError, parseSelection } from './readline-prompts.js';
 
 const PROMPT = `${c.cyan('linkedin')} ${c.dim('▸')} `;
-const BUILTINS = ['help', 'browse', 'menu', 'history', 'clear', 'status', 'login', 'logout', 'exit', 'quit'];
+const BUILTINS = ['help', 'browse', 'menu', 'history', 'clear', 'status', 'login', 'logout', 'sessions', 'exit', 'quit'];
 
 export type ShellMode = 'classic' | 'shell' | 'plain';
 
@@ -137,7 +137,7 @@ export interface ShellSession {
 
 /** Compact header frame (spec §4.2) — built without network calls. */
 export function renderShellHeader(version: string, commandCount: number, sessionSaved: boolean): string {
-  const title = `linkedin-cli v${version} · interactive shell`;
+  const title = `linkedin-osint-cli v${version} · interactive shell`;
   const session = sessionSaved
     ? `session: saved · ${commandCount} tools · type "help" or plain English`
     : `session: none — type "login" · ${commandCount} tools · "help" lists commands`;
@@ -197,6 +197,12 @@ async function handleBuiltin(session: ShellSession, name: string, rest: Token[])
     case 'logout':
       session.execSession(['logout']);
       return 'continue';
+    case 'sessions':
+      // Registry listing re-execs the CLI (like the other session commands) so
+      // the JSON stays identical to `linkedin sessions` outside the shell;
+      // `--fingerprint` / `--purge` forward through unchanged.
+      session.execSession(['sessions', ...rest.map((token) => token.raw)]);
+      return 'continue';
     case 'menu':
       return doBrowse(session, []);
     case 'browse':
@@ -215,6 +221,7 @@ function handleHelp(session: ShellSession, rest: Token[]): Verdict {
     session.write('  history                    this session\'s prompt history');
     session.write('  clear                      clear the screen');
     session.write('  status | login | logout    re-exec the CLI session commands');
+    session.write('  sessions                   captured accounts (no cookies printed; --fingerprint | --purge)');
     session.write('  exit | quit                leave the shell');
     session.write(`\n${c.bold('groups:')} ${session.catalog.map((g) => g.info.group).join(', ')}`);
     session.write(c.dim('  exact form:  <group> <subcommand> [--flag value ...]'));
